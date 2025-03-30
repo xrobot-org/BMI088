@@ -290,6 +290,14 @@ class BMI088 : public LibXR::Application {
           gyro_data_.x(), gyro_data_.y(), gyro_data_.z(), accl_data_.x(),
           accl_data_.y(), accl_data_.z());
     }
+
+    /* Use other timer as HAL timebase (Because the priority of SysTick is
+      lowest) and set the priority to the highest to avoid this issue */
+    if (fabs(dt_gyro_) > 1500 || fabs(dt_gyro_) < 300 ||
+        fabs(dt_accl_) > 1500 || fabs(dt_accl_) < 300) {
+      LibXR::STDIO::Printf("BMI088 Frequency Error: gyro: %6f, accl: %6f\r\n",
+                           dt_gyro_.to_secondf(), dt_accl_.to_secondf());
+    }
   }
 
   static void ThreadFunc(BMI088<HardwareContainer> *bmi088) {
