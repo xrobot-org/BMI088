@@ -83,8 +83,8 @@ repository: https://github.com/xrobot-org/BMI088
 #define BMI088_CHIP_ID_ACCL (0x1E)
 #define BMI088_CHIP_ID_GYRO (0x0F)
 
-#define BMI088_ACCL_RX_BUFF_LEN (20)
-#define BMI088_GYRO_RX_BUFF_LEN (7)
+#define BMI088_ACCL_RX_BUFF_LEN (19)
+#define BMI088_GYRO_RX_BUFF_LEN (6)
 
 template <typename HardwareContainer>
 class BMI088 : public LibXR::Application {
@@ -110,46 +110,29 @@ class BMI088 : public LibXR::Application {
   }
 
   void WriteSingle(Device device, uint8_t reg, uint8_t data) {
-    write_buffer_[0] = static_cast<uint8_t>(reg & 0x7f);
-    write_buffer_[1] = data;
     Select(device);
-    spi_->Write({write_buffer_, 2}, op_spi_);
+    spi_->MemWrite(reg, data, op_spi_);
     Deselect(device);
-
-    LibXR::Thread::Sleep(1);
-
-    if (ReadSingle(device, reg) != data) {
-      ASSERT(false);
-    }
 
     /* For accelmeter, two write operations need at least 2us */
     LibXR::Thread::Sleep(1);
   }
 
   uint8_t ReadSingle(Device device, uint8_t reg) {
-    write_buffer_[0] = static_cast<uint8_t>(reg | 0x80);
-    write_buffer_[1] = 0x00;
-    write_buffer_[2] = 0x00;
-    read_buffer_[0] = 0x00;
-    read_buffer_[1] = 0x00;
-    read_buffer_[2] = 0x00;
     Select(device);
-    spi_->ReadAndWrite({read_buffer_, 3}, {write_buffer_, 3}, op_spi_);
+    spi_->MemRead(reg, {rw_buffer_, 2}, op_spi_);
     Deselect(device);
 
     if (device == Device::ACCELMETER) {
-      return read_buffer_[2];
+      return rw_buffer_[1];
     } else {
-      return read_buffer_[1];
+      return rw_buffer_[0];
     }
   }
 
   void Read(Device device, uint8_t reg, uint8_t len) {
-    memset(write_buffer_, 0, len + 1);
-    memset(read_buffer_, 0, len + 1);
-    write_buffer_[0] = static_cast<uint8_t>(reg | 0x80);
     Select(device);
-    spi_->ReadAndWrite({read_buffer_, len}, {write_buffer_, len}, op_spi_);
+    spi_->MemRead(reg, {rw_buffer_, len}, op_spi_);
     Deselect(device);
   }
 
@@ -206,7 +189,7 @@ class BMI088 : public LibXR::Application {
     int_gyro_->RegisterCallback(gyro_int_cb);
 
     while (!Init()) {
-      // LibXR::STDIO::Printf("BMI088: Init failed. Try again.\r\n");
+      LibXR::STDIO::Printf("BMI088: Init failed. Try again.\r\n");
       LibXR::Thread::Sleep(100);
     }
 
@@ -341,11 +324,11 @@ class BMI088 : public LibXR::Application {
     std::array<int16_t, 3> raw_int16;
     std::array<float, 3> raw;
     for (int i = 0; i < 3; i++) {
-      raw_int16[i] = (read_buffer_[i * 2 + 3] << 8) | read_buffer_[i * 2 + 2];
+      raw_int16[i] = (rw_buffer_[i * 2 + 2] << 8) | rw_buffer_[i * 2 + 1];
       raw[i] = static_cast<float>(raw_int16[i]) / 1365.0f;
     }
 
-    int16_t raw_temp = (read_buffer_[18] << 3) | (read_buffer_[19] >> 5);
+    int16_t raw_temp = (rw_buffer_[17] << 3) | (rw_buffer_[18] >> 5);
     if (raw_temp > 1023) {
       raw_temp -= 2048;
     }
@@ -363,7 +346,7 @@ class BMI088 : public LibXR::Application {
     std::array<int16_t, 3> raw_int16;
     std::array<float, 3> raw;
     for (int i = 0; i < 3; i++) {
-      raw_int16[i] = (read_buffer_[i * 2 + 2] << 8) | read_buffer_[i * 2 + 1];
+      raw_int16[i] = (rw_buffer_[i * 2 + 1] << 8) | rw_buffer_[i * 2];
       raw[i] = static_cast<float>(raw_int16[i]) / 16.384f * M_DEG2RAD_MULT;
     }
 
@@ -477,7 +460,7 @@ class BMI088 : public LibXR::Application {
 
   float target_temperature_ = 25.0f;
 
-  uint8_t read_buffer_[20], write_buffer_[20];
+  uint8_t rw_buffer_[20];
   Eigen::Matrix<float, 3, 1> gyro_data_, accl_data_;
   LibXR::Topic topic_gyro_, topic_accl_;
   LibXR::GPIO *cs_accl_, *cs_gyro_, *int_accl_, *int_gyro_;
