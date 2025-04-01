@@ -197,6 +197,16 @@ class BMI088 : public LibXR::Application {
 
     thread_.Create(this, ThreadFunc, "bmi088_thread", task_stack_depth,
                    LibXR::Thread::Priority::REALTIME);
+
+    void (*temp_ctrl_func)(BMI088<HardwareContainer> *) =
+        [](BMI088<HardwareContainer> *bmi088) {
+          bmi088->ControlTemperature(0.05f);
+        };
+
+    auto temp_ctrl_task = LibXR::Timer::CreateTask(temp_ctrl_func, this, 50);
+
+    LibXR::Timer::Add(temp_ctrl_task);
+    LibXR::Timer::Start(temp_ctrl_task);
   }
 
   bool Init() {
@@ -285,7 +295,7 @@ class BMI088 : public LibXR::Application {
 
   static void ThreadFunc(BMI088<HardwareContainer> *bmi088) {
     /* Start PWM */
-    bmi088->pwm_->SetConfig({1000});
+    bmi088->pwm_->SetConfig({30000});
     bmi088->pwm_->SetDutyCycle(0);
     bmi088->pwm_->Enable();
 
@@ -302,14 +312,17 @@ class BMI088 : public LibXR::Application {
           bmi088->RecvGyro();
           bmi088->ParseGyroData();
           bmi088->topic_gyro_.Publish(bmi088->gyro_data_);
-          bmi088->pwm_->SetDutyCycle(bmi088->pid_heat_.Calculate(
-              bmi088->target_temperature_, bmi088->temperature_,
-              bmi088->dt_gyro_));
         }
       } else {
-        LibXR::STDIO::Printf("BMI088 wait timeout.");
+        LibXR::STDIO::Printf("BMI088 wait timeout.\r\n");
       }
     }
+  }
+
+  void ControlTemperature(float dt) {
+    auto duty_cycle =
+        pid_heat_.Calculate(target_temperature_, temperature_, dt);
+    pwm_->SetDutyCycle(duty_cycle);
   }
 
   void RecvAccel(void) {
@@ -429,6 +442,7 @@ class BMI088 : public LibXR::Application {
       if (strcmp(argv[1], "show") == 0) {
         int time = std::stoi(argv[2]);
         int delay = std::stoi(argv[3]);
+
         delay = std::clamp(delay, 2, 1000);
 
         while (time > 0) {
