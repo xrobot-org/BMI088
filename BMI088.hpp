@@ -403,8 +403,8 @@ class BMI088 : public LibXR::Application {
           x += static_cast<double>(bmi088->gyro_data_.x()) / 30000.0;
           y += static_cast<double>(bmi088->gyro_data_.y()) / 30000.0;
           z += static_cast<double>(bmi088->gyro_data_.z()) / 30000.0;
-          if (i % 100 == 0) {
-            LibXR::STDIO::Printf("Progress: %d / 30000\r", i);
+          if (i % 1000 == 0) {
+            LibXR::STDIO::Printf("Progress: %d / 30\r", i / 1000);
           }
           LibXR::Thread::Sleep(1);
         }
@@ -425,8 +425,8 @@ class BMI088 : public LibXR::Application {
           x += static_cast<double>(bmi088->gyro_data_.x()) / 30000.0;
           y += static_cast<double>(bmi088->gyro_data_.y()) / 30000.0;
           z += static_cast<double>(bmi088->gyro_data_.z()) / 30000.0;
-          if (i % 100 == 0) {
-            LibXR::STDIO::Printf("Progress: %d / 30000\r", i);
+          if (i % 1000 == 0) {
+            LibXR::STDIO::Printf("Progress: %d / 30\r", i / 1000);
           }
           LibXR::Thread::Sleep(1);
         }
