@@ -7,8 +7,8 @@ module_description: 博世 BMI088 6 轴惯性测量单元（IMU）的驱动模�
 constructor_args:
   - gyro_freq: BMI088<HardwareContainer>::GyroFreq::GYRO_2000HZ_BW532HZ
   - accl_freq: BMI088<HardwareContainer>::AcclFreq::ACCL_1600HZ
-  - gyro_scale: BMI088<HardwareContainer>::GyroScale::DEG_2000DPS
-  - accl_scale: BMI088<HardwareContainer>::AcclScale::ACCL_24G
+  - gyro_range: BMI088<HardwareContainer>::GyroRange::DEG_2000DPS
+  - accl_range: BMI088<HardwareContainer>::AcclRange::ACCL_24G
   - rotation:
       w: 1.0
       x: 0.0
@@ -95,7 +95,7 @@ class BMI088 : public LibXR::Application {
  public:
   enum class Device { ACCELMETER, GYROSCOPE };
 
-  enum class GyroScale : uint8_t {
+  enum class GyroRange : uint8_t {
     DEG_2000DPS = 0x00,
     DEG_1000DPS = 0x01,
     DEG_500DPS = 0x02,
@@ -103,7 +103,7 @@ class BMI088 : public LibXR::Application {
     DEG_125DPS = 0x04
   };
 
-  enum class AcclScale : uint8_t {
+  enum class AcclRange : uint8_t {
     ACCL_3G = 0x00,
     ACCL_6G = 0x01,
     ACCL_12G = 0x02,
@@ -178,13 +178,13 @@ class BMI088 : public LibXR::Application {
   }
 
   BMI088(HardwareContainer &hw, LibXR::ApplicationManager &app, GyroFreq freq,
-         AcclFreq accl_freq, GyroScale gyro_scale, AcclScale accl_scale,
+         AcclFreq accl_freq, GyroRange gyro_range, AcclRange accl_range,
          LibXR::Quaternion<float> &&rotation,
          LibXR::PID<float>::Param &&pid_param, const char *gyro_topic_name,
          const char *accl_topic_name, float target_temperature,
          size_t task_stack_depth)
-      : gyro_scale_(gyro_scale),
-        accel_scale_(accl_scale),
+      : gyro_range_(gyro_range),
+        accel_range_(accl_range),
         gyro_freq_(freq),
         accl_freq_(accl_freq),
         target_temperature_(target_temperature),
@@ -282,7 +282,7 @@ class BMI088 : public LibXR::Application {
 
     /* 0x00: +-3G. 0x01: +-6G. 0x02: +-12G. 0x03: +-24G. */
     WriteSingle(Device::ACCELMETER, BMI088_REG_ACCL_RANGE,
-                static_cast<uint8_t>(accel_scale_));
+                static_cast<uint8_t>(accel_range_));
 
     /* INT1 as output. Push-pull. Active low. Output. */
     WriteSingle(Device::ACCELMETER, BMI088_REG_ACCL_INT1_IO_CONF, 0x08);
@@ -299,7 +299,7 @@ class BMI088 : public LibXR::Application {
     /* Gyro init. */
     /* 0x00: +-2000. 0x01: +-1000. 0x02: +-500. 0x03: +-250. 0x04: +-125. */
     WriteSingle(Device::GYROSCOPE, BMI088_REG_GYRO_RANGE,
-                static_cast<uint8_t>(gyro_scale_));
+                static_cast<uint8_t>(gyro_range_));
 
     /* ODR: 0x02: 1000Hz. 0x03: 400Hz. 0x06: 200Hz. 0x07: 100Hz. */
     WriteSingle(Device::GYROSCOPE, BMI088_REG_GYRO_BANDWIDTH,
@@ -320,10 +320,10 @@ class BMI088 : public LibXR::Application {
     return true;
   }
 
-  void SetGyroScale(GyroScale scale) {
+  void SetGyroRange(GyroRange range) {
     WriteSingle(Device::GYROSCOPE, BMI088_REG_GYRO_RANGE,
-                static_cast<uint8_t>(scale));
-    gyro_scale_ = scale;
+                static_cast<uint8_t>(range));
+    gyro_range_ = range;
   }
 
   void OnMonitor(void) override {
@@ -438,20 +438,20 @@ class BMI088 : public LibXR::Application {
   }
 
   float GetAcclLSB(void) {
-    switch (accel_scale_) {
-      case AcclScale::ACCL_24G:
+    switch (accel_range_) {
+      case AcclRange::ACCL_24G:
         return 1.0 / 1365.0;
         break;
 
-      case AcclScale::ACCL_12G:
+      case AcclRange::ACCL_12G:
         return 1.0 / 2730.0;
         break;
 
-      case AcclScale::ACCL_6G:
+      case AcclRange::ACCL_6G:
         return 1.0 / 5460.0;
         break;
 
-      case AcclScale::ACCL_3G:
+      case AcclRange::ACCL_3G:
         return 1.0 / 10920.0;
         break;
     }
@@ -461,11 +461,11 @@ class BMI088 : public LibXR::Application {
     std::array<int16_t, 3> raw_int16;
     std::array<float, 3> raw;
 
-    float scale = GetAcclLSB();
+    float range = GetAcclLSB();
 
     for (int i = 0; i < 3; i++) {
       raw_int16[i] = (rw_buffer_[i * 2 + 2] << 8) | rw_buffer_[i * 2 + 1];
-      raw[i] = static_cast<float>(raw_int16[i]) * scale;
+      raw[i] = static_cast<float>(raw_int16[i]) * range;
     }
 
     int16_t raw_temp = (rw_buffer_[17] << 3) | (rw_buffer_[18] >> 5);
@@ -483,20 +483,20 @@ class BMI088 : public LibXR::Application {
   }
 
   float GetGyroLSB() {
-    switch (gyro_scale_) {
-      case GyroScale::DEG_2000DPS:
+    switch (gyro_range_) {
+      case GyroRange::DEG_2000DPS:
         return 1.0 / 16.384;
         break;
-      case GyroScale::DEG_1000DPS:
+      case GyroRange::DEG_1000DPS:
         return 1.0 / 32.768;
         break;
-      case GyroScale::DEG_500DPS:
+      case GyroRange::DEG_500DPS:
         return 1.0 / 65.536;
         break;
-      case GyroScale::DEG_250DPS:
+      case GyroRange::DEG_250DPS:
         return 1.0 / 131.072;
         break;
-      case GyroScale::DEG_125DPS:
+      case GyroRange::DEG_125DPS:
         return 1.0 / 262.144;
         break;
     }
@@ -505,11 +505,11 @@ class BMI088 : public LibXR::Application {
   void ParseGyroData(void) {
     std::array<int16_t, 3> raw_int16;
     std::array<float, 3> raw;
-    float scale = GetGyroLSB();
+    float range = GetGyroLSB();
 
     for (int i = 0; i < 3; i++) {
       raw_int16[i] = (rw_buffer_[i * 2 + 1] << 8) | rw_buffer_[i * 2];
-      raw[i] = static_cast<float>(raw_int16[i]) * scale * M_DEG2RAD_MULT;
+      raw[i] = static_cast<float>(raw_int16[i]) * range * M_DEG2RAD_MULT;
     }
 
     if (in_cali_) {
@@ -639,8 +639,8 @@ class BMI088 : public LibXR::Application {
     return 0;
   }
 
-  GyroScale gyro_scale_ = GyroScale::DEG_2000DPS;
-  AcclScale accel_scale_ = AcclScale::ACCL_24G;
+  GyroRange gyro_range_ = GyroRange::DEG_2000DPS;
+  AcclRange accel_range_ = AcclRange::ACCL_24G;
   GyroFreq gyro_freq_ = GyroFreq::GYRO_2000HZ_BW230HZ;
   AcclFreq accl_freq_ = AcclFreq::ACCL_1600HZ;
 
