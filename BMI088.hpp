@@ -598,16 +598,20 @@ class BMI088 : public LibXR::Application {
         bmi088->in_cali_ = false;
         LibXR::Thread::Sleep(1000);
 
-        LibXR::STDIO::Printf("\r\nCalibration error - x: %f, y: %f, z: %f\r\n",
-                             static_cast<double>(bmi088->gyro_cali_.data()[0]) /
-                                 static_cast<double>(bmi088->cali_counter_) *
-                                 bmi088->GetGyroLSB() * M_DEG2RAD_MULT,
-                             static_cast<double>(bmi088->gyro_cali_.data()[1]) /
-                                 static_cast<double>(bmi088->cali_counter_) *
-                                 bmi088->GetGyroLSB() * M_DEG2RAD_MULT,
-                             static_cast<double>(bmi088->gyro_cali_.data()[2]) /
-                                 static_cast<double>(bmi088->cali_counter_) *
-                                 bmi088->GetGyroLSB() * M_DEG2RAD_MULT);
+        LibXR::STDIO::Printf(
+            "\r\nCalibration error - x: %f, y: %f, z: %f\r\n",
+            static_cast<double>(bmi088->gyro_cali_.data()[0]) /
+                    static_cast<double>(bmi088->cali_counter_) *
+                    bmi088->GetGyroLSB() * M_DEG2RAD_MULT -
+                bmi088->gyro_data_key_.data_.x(),
+            static_cast<double>(bmi088->gyro_cali_.data()[1]) /
+                    static_cast<double>(bmi088->cali_counter_) *
+                    bmi088->GetGyroLSB() * M_DEG2RAD_MULT -
+                bmi088->gyro_data_key_.data_.y(),
+            static_cast<double>(bmi088->gyro_cali_.data()[2]) /
+                    static_cast<double>(bmi088->cali_counter_) *
+                    bmi088->GetGyroLSB() * M_DEG2RAD_MULT -
+                bmi088->gyro_data_key_.data_.z());
 
         bmi088->gyro_data_key_.Set(bmi088->gyro_data_key_.data_);
         LibXR::STDIO::Printf("Calibration data saved.\r\n");
