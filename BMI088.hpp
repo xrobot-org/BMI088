@@ -320,12 +320,6 @@ class BMI088 : public LibXR::Application {
     return true;
   }
 
-  void SetGyroRange(GyroRange range) {
-    WriteSingle(Device::GYROSCOPE, BMI088_REG_GYRO_RANGE,
-                static_cast<uint8_t>(range));
-    gyro_range_ = range;
-  }
-
   void OnMonitor(void) override {
     if (std::isinf(gyro_data_.x()) || std::isinf(gyro_data_.y()) ||
         std::isinf(gyro_data_.z()) || std::isinf(accl_data_.x()) ||
