@@ -235,11 +235,11 @@ class BMI088 : public LibXR::Application {
     int_gyro_->RegisterCallback(gyro_int_cb);
 
     while (!Init()) {
-      LibXR::STDIO::Printf("BMI088: Init failed. Try again.\r\n");
+      XR_LOG_ERROR("BMI088: Init failed. Try again.\r\n");
       LibXR::Thread::Sleep(100);
     }
 
-    LibXR::STDIO::Printf("BMI088: Init succeeded.\r\n");
+    XR_LOG_PASS("BMI088: Init succeeded.\r\n");
 
     thread_.Create(this, ThreadFunc, "bmi088_thread", task_stack_depth,
                    LibXR::Thread::Priority::REALTIME);
@@ -327,7 +327,7 @@ class BMI088 : public LibXR::Application {
         std::isnan(gyro_data_.x()) || std::isnan(gyro_data_.y()) ||
         std::isnan(gyro_data_.z()) || std::isnan(accl_data_.x()) ||
         std::isnan(accl_data_.y()) || std::isnan(accl_data_.z())) {
-      LibXR::STDIO::Printf(
+      XR_LOG_WARN(
           "BMI088: NaN data detected. gyro: %f %f %f, accl: %f %f %f\r\n",
           gyro_data_.x(), gyro_data_.y(), gyro_data_.z(), accl_data_.x(),
           accl_data_.y(), accl_data_.z());
@@ -386,8 +386,8 @@ class BMI088 : public LibXR::Application {
   lowest) and set the priority to the highest to avoid this issue */
     if (std::fabs(ideal_accl_dt - dt_accl_.to_secondf()) > 0.0003f ||
         std::fabs(ideal_gyro_dt - dt_gyro_.to_secondf()) > 0.0003f) {
-      LibXR::STDIO::Printf("BMI088 Frequency Error: gyro: %6f, accl: %6f\r\n",
-                           dt_gyro_.to_secondf(), dt_accl_.to_secondf());
+      XR_LOG_WARN("BMI088 Frequency Error: gyro: %6f, accl: %6f\r\n",
+                  dt_gyro_.to_secondf(), dt_accl_.to_secondf());
     }
   }
 
@@ -412,7 +412,7 @@ class BMI088 : public LibXR::Application {
           bmi088->topic_gyro_.Publish(bmi088->gyro_data_);
         }
       } else {
-        LibXR::STDIO::Printf("BMI088 wait timeout.\r\n");
+        XR_LOG_WARN("BMI088 wait timeout.\r\n");
       }
     }
   }
