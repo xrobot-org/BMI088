@@ -5,10 +5,10 @@
 module_name: BMI088
 module_description: 博世 BMI088 6 轴惯性测量单元（IMU）的驱动模块 / Driver module for Bosch BMI088 6-axis Inertial Measurement Unit (IMU)
 constructor_args:
-  - gyro_freq: BMI088<HardwareContainer>::GyroFreq::GYRO_2000HZ_BW532HZ
-  - accl_freq: BMI088<HardwareContainer>::AcclFreq::ACCL_1600HZ
-  - gyro_range: BMI088<HardwareContainer>::GyroRange::DEG_2000DPS
-  - accl_range: BMI088<HardwareContainer>::AcclRange::ACCL_24G
+  - gyro_freq: BMI088::GyroFreq::GYRO_2000HZ_BW532HZ
+  - accl_freq: BMI088::AcclFreq::ACCL_1600HZ
+  - gyro_range: BMI088::GyroRange::DEG_2000DPS
+  - accl_range: BMI088::AcclRange::ACCL_24G
   - rotation:
       w: 1.0
       x: 0.0
@@ -90,7 +90,6 @@ repository: https://github.com/xrobot-org/BMI088
 #define BMI088_ACCL_RX_BUFF_LEN (19)
 #define BMI088_GYRO_RX_BUFF_LEN (6)
 
-template <typename HardwareContainer>
 class BMI088 : public LibXR::Application {
  public:
   enum class Device { ACCELMETER, GYROSCOPE };
@@ -177,9 +176,9 @@ class BMI088 : public LibXR::Application {
     Deselect(device);
   }
 
-  BMI088(HardwareContainer &hw, LibXR::ApplicationManager &app, GyroFreq freq,
-         AcclFreq accl_freq, GyroRange gyro_range, AcclRange accl_range,
-         LibXR::Quaternion<float> &&rotation,
+  BMI088(LibXR::HardwareContainer &hw, LibXR::ApplicationManager &app,
+         GyroFreq freq, AcclFreq accl_freq, GyroRange gyro_range,
+         AcclRange accl_range, LibXR::Quaternion<float> &&rotation,
          LibXR::PID<float>::Param &&pid_param, const char *gyro_topic_name,
          const char *accl_topic_name, float target_temperature,
          size_t task_stack_depth)
@@ -212,7 +211,7 @@ class BMI088 : public LibXR::Application {
     int_gyro_->DisableInterrupt();
 
     auto accl_int_cb = LibXR::Callback<>::Create(
-        [](bool in_isr, BMI088<HardwareContainer> *bmi088) {
+        [](bool in_isr, BMI088 *bmi088) {
           auto time = LibXR::Timebase::GetMicroseconds();
           bmi088->dt_accl_ = time - bmi088->last_accl_int_time_;
           bmi088->last_accl_int_time_ = time;
@@ -222,7 +221,7 @@ class BMI088 : public LibXR::Application {
         this);
 
     auto gyro_int_cb = LibXR::Callback<>::Create(
-        [](bool in_isr, BMI088<HardwareContainer> *bmi088) {
+        [](bool in_isr, BMI088 *bmi088) {
           auto time = LibXR::Timebase::GetMicroseconds();
           bmi088->dt_gyro_ = time - bmi088->last_gyro_int_time_;
           bmi088->last_gyro_int_time_ = time;
@@ -244,10 +243,9 @@ class BMI088 : public LibXR::Application {
     thread_.Create(this, ThreadFunc, "bmi088_thread", task_stack_depth,
                    LibXR::Thread::Priority::REALTIME);
 
-    void (*temp_ctrl_func)(BMI088<HardwareContainer> *) =
-        [](BMI088<HardwareContainer> *bmi088) {
-          bmi088->ControlTemperature(0.05f);
-        };
+    void (*temp_ctrl_func)(BMI088 *) = [](BMI088 *bmi088) {
+      bmi088->ControlTemperature(0.05f);
+    };
 
     auto temp_ctrl_task = LibXR::Timer::CreateTask(temp_ctrl_func, this, 50);
 
@@ -391,7 +389,7 @@ class BMI088 : public LibXR::Application {
     }
   }
 
-  static void ThreadFunc(BMI088<HardwareContainer> *bmi088) {
+  static void ThreadFunc(BMI088 *bmi088) {
     /* Start PWM */
     bmi088->pwm_->SetConfig({30000});
     bmi088->pwm_->SetDutyCycle(0);
@@ -524,8 +522,7 @@ class BMI088 : public LibXR::Application {
   }
 
  private:
-  static int CommandFunc(BMI088<HardwareContainer> *bmi088, int argc,
-                         char **argv) {
+  static int CommandFunc(BMI088 *bmi088, int argc, char **argv) {
     if (argc == 1) {
       LibXR::STDIO::Printf("Usage:\r\n");
       LibXR::STDIO::Printf(
