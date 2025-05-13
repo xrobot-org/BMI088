@@ -210,7 +210,7 @@ class BMI088 : public LibXR::Application {
     int_accl_->DisableInterrupt();
     int_gyro_->DisableInterrupt();
 
-    auto accl_int_cb = LibXR::Callback<>::Create(
+    auto accl_int_cb = LibXR::GPIO::Callback::Create(
         [](bool in_isr, BMI088 *bmi088) {
           auto time = LibXR::Timebase::GetMicroseconds();
           bmi088->dt_accl_ = time - bmi088->last_accl_int_time_;
@@ -220,7 +220,7 @@ class BMI088 : public LibXR::Application {
         },
         this);
 
-    auto gyro_int_cb = LibXR::Callback<>::Create(
+    auto gyro_int_cb = LibXR::GPIO::Callback::Create(
         [](bool in_isr, BMI088 *bmi088) {
           auto time = LibXR::Timebase::GetMicroseconds();
           bmi088->dt_gyro_ = time - bmi088->last_gyro_int_time_;
