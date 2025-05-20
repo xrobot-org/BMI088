@@ -25,7 +25,7 @@ constructor_args:
   - gyro_topic_name: "bmi088_gyro"
   - accl_topic_name: "bmi088_accl"
   - target_temperature: 45
-  - task_stack_depth: 512
+  - task_stack_depth: 2048
 required_hardware: spi_bmi088/spi1/SPI1 bmi088_accl_cs bmi088_gyro_cs bmi088_accl_int bmi088_gyro_int pwm_bmi088_heat ramfs database
 repository: https://github.com/xrobot-org/BMI088
 === END MANIFEST === */
