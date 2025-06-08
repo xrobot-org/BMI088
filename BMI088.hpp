@@ -382,10 +382,10 @@ class BMI088 : public LibXR::Application {
 
     /* Use other timer as HAL timebase (Because the priority of SysTick is
   lowest) and set the priority to the highest to avoid this issue */
-    if (std::fabs(ideal_accl_dt - dt_accl_.to_secondf()) > 0.0003f ||
-        std::fabs(ideal_gyro_dt - dt_gyro_.to_secondf()) > 0.0003f) {
+    if (std::fabs(ideal_accl_dt - dt_accl_.ToSecondf()) > 0.0003f ||
+        std::fabs(ideal_gyro_dt - dt_gyro_.ToSecondf()) > 0.0003f) {
       XR_LOG_WARN("BMI088 Frequency Error: gyro: %6f, accl: %6f\r\n",
-                  dt_gyro_.to_secondf(), dt_accl_.to_secondf());
+                  dt_gyro_.ToSecondf(), dt_accl_.ToSecondf());
     }
   }
 
