@@ -1,8 +1,7 @@
 #pragma once
 
 // clang-format off
-/* === MODULE MANIFEST ===
-module_name: BMI088
+/* === MODULE MANIFEST V2 ===
 module_description: 博世 BMI088 6 轴惯性测量单元（IMU）的驱动模块 / Driver module for Bosch BMI088 6-axis Inertial Measurement Unit (IMU)
 constructor_args:
   - gyro_freq: BMI088::GyroFreq::GYRO_2000HZ_BW532HZ
@@ -26,8 +25,9 @@ constructor_args:
   - accl_topic_name: "bmi088_accl"
   - target_temperature: 45
   - task_stack_depth: 2048
+template_args: []
 required_hardware: spi_bmi088/spi1/SPI1 bmi088_accl_cs bmi088_gyro_cs bmi088_accl_int bmi088_gyro_int pwm_bmi088_heat ramfs database
-repository: https://github.com/xrobot-org/BMI088
+depends: []
 === END MANIFEST === */
 // clang-format on
 
