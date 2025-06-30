@@ -92,7 +92,7 @@ depends: []
 
 class BMI088 : public LibXR::Application {
  public:
-  enum class Device { ACCELMETER, GYROSCOPE };
+  enum class Device : uint8_t { ACCELMETER, GYROSCOPE };
 
   enum class GyroRange : uint8_t {
     DEG_2000DPS = 0x00,
@@ -179,7 +179,7 @@ class BMI088 : public LibXR::Application {
   BMI088(LibXR::HardwareContainer &hw, LibXR::ApplicationManager &app,
          GyroFreq freq, AcclFreq accl_freq, GyroRange gyro_range,
          AcclRange accl_range, LibXR::Quaternion<float> &&rotation,
-         LibXR::PID<float>::Param &&pid_param, const char *gyro_topic_name,
+         LibXR::PID<float>::Param pid_param, const char *gyro_topic_name,
          const char *accl_topic_name, float target_temperature,
          size_t task_stack_depth)
       : gyro_range_(gyro_range),
@@ -456,11 +456,15 @@ class BMI088 : public LibXR::Application {
     float range = GetAcclLSB();
 
     for (int i = 0; i < 3; i++) {
-      raw_int16[i] = (rw_buffer_[i * 2 + 2] << 8) | rw_buffer_[i * 2 + 1];
+      raw_int16[i] = static_cast<int16_t>(
+          (static_cast<uint16_t>(rw_buffer_[i * 2 + 2]) << 8) |
+          static_cast<uint16_t>(rw_buffer_[i * 2 + 1]));
       raw[i] = static_cast<float>(raw_int16[i]) * range;
     }
 
-    int16_t raw_temp = (rw_buffer_[17] << 3) | (rw_buffer_[18] >> 5);
+    int16_t raw_temp =
+        static_cast<int16_t>((static_cast<uint16_t>(rw_buffer_[17]) << 3) |
+                             (static_cast<uint16_t>(rw_buffer_[18]) >> 5));
     if (raw_temp > 1023) {
       raw_temp -= 2048;
     }
@@ -500,7 +504,9 @@ class BMI088 : public LibXR::Application {
     float range = GetGyroLSB();
 
     for (int i = 0; i < 3; i++) {
-      raw_int16[i] = (rw_buffer_[i * 2 + 1] << 8) | rw_buffer_[i * 2];
+      raw_int16[i] = static_cast<int16_t>(
+          (static_cast<uint16_t>(rw_buffer_[i * 2 + 1]) << 8) |
+          static_cast<uint16_t>(rw_buffer_[i * 2]));
       raw[i] = static_cast<float>(raw_int16[i]) * range * M_DEG2RAD_MULT;
     }
 
@@ -559,18 +565,18 @@ class BMI088 : public LibXR::Application {
         bmi088->in_cali_ = false;
         LibXR::Thread::Sleep(1000);
 
-        bmi088->gyro_data_key_.data_.x() =
+        bmi088->gyro_data_key_.data_.x() = static_cast<float>(
             static_cast<double>(bmi088->gyro_cali_.data()[0]) /
             static_cast<double>(bmi088->cali_counter_) * bmi088->GetGyroLSB() *
-            M_DEG2RAD_MULT;
-        bmi088->gyro_data_key_.data_.y() =
+            M_DEG2RAD_MULT);
+        bmi088->gyro_data_key_.data_.y() = static_cast<float>(
             static_cast<double>(bmi088->gyro_cali_.data()[1]) /
             static_cast<double>(bmi088->cali_counter_) * bmi088->GetGyroLSB() *
-            M_DEG2RAD_MULT;
-        bmi088->gyro_data_key_.data_.z() =
+            M_DEG2RAD_MULT);
+        bmi088->gyro_data_key_.data_.z() = static_cast<float>(
             static_cast<double>(bmi088->gyro_cali_.data()[2]) /
             static_cast<double>(bmi088->cali_counter_) * bmi088->GetGyroLSB() *
-            M_DEG2RAD_MULT;
+            M_DEG2RAD_MULT);
 
         LibXR::STDIO::Printf("\r\nCalibration result - x: %f, y: %f, z: %f\r\n",
                              bmi088->gyro_data_key_.data_.x(),
@@ -645,10 +651,10 @@ class BMI088 : public LibXR::Application {
 
   float temperature_ = 0.0f;
 
-  LibXR::TimestampUS last_gyro_int_time_ = 0;
-  LibXR::TimestampUS last_accl_int_time_ = 0;
-  LibXR::TimestampUS::TimeDiffUS dt_gyro_ = 0;
-  LibXR::TimestampUS::TimeDiffUS dt_accl_ = 0;
+  LibXR::MicrosecondTimestamp last_gyro_int_time_ = 0;
+  LibXR::MicrosecondTimestamp last_accl_int_time_ = 0;
+  LibXR::MicrosecondTimestamp::Duration dt_gyro_ = 0;
+  LibXR::MicrosecondTimestamp::Duration dt_accl_ = 0;
 
   float target_temperature_ = 25.0f;
 
