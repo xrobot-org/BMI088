@@ -4,7 +4,7 @@
 
 ## 硬件需求 / Required Hardware
 
-spi\_bmi088/spi1/SPI1, bmi088\_accl\_cs, bmi088\_gyro\_cs, bmi088\_accl\_int, bmi088\_gyro\_int, pwm\_bmi088\_heat, ramfs, database
+spi\_bmi088/spi1/SPI1, bmi088\_accl\_cs, bmi088\_gyro\_cs, bmi088\_gyro\_int, pwm\_bmi088\_heat, ramfs, database
 
 ## 构造参数 / Constructor Arguments
 

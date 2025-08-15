@@ -26,7 +26,7 @@ constructor_args:
   - target_temperature: 45
   - task_stack_depth: 2048
 template_args: []
-required_hardware: spi_bmi088/spi1/SPI1 bmi088_accl_cs bmi088_gyro_cs bmi088_accl_int bmi088_gyro_int pwm_bmi088_heat ramfs database
+required_hardware: spi_bmi088/spi1/SPI1 bmi088_accl_cs bmi088_gyro_cs bmi088_gyro_int pwm_bmi088_heat ramfs database
 depends: []
 === END MANIFEST === */
 // clang-format on
@@ -191,7 +191,6 @@ class BMI088 : public LibXR::Application {
         topic_accl_(accl_topic_name, sizeof(accl_data_)),
         cs_accl_(hw.template FindOrExit<LibXR::GPIO>({"bmi088_accl_cs"})),
         cs_gyro_(hw.template FindOrExit<LibXR::GPIO>({"bmi088_gyro_cs"})),
-        int_accl_(hw.template FindOrExit<LibXR::GPIO>({"bmi088_accl_int"})),
         int_gyro_(hw.template FindOrExit<LibXR::GPIO>({"bmi088_gyro_int"})),
         spi_(
             hw.template FindOrExit<LibXR::SPI>({"spi_bmi088", "spi1", "SPI1"})),
@@ -207,18 +206,8 @@ class BMI088 : public LibXR::Application {
 
     hw.template FindOrExit<LibXR::RamFS>({"ramfs"})->Add(cmd_file_);
 
-    int_accl_->DisableInterrupt();
     int_gyro_->DisableInterrupt();
 
-    auto accl_int_cb = LibXR::GPIO::Callback::Create(
-        [](bool in_isr, BMI088 *bmi088) {
-          auto time = LibXR::Timebase::GetMicroseconds();
-          bmi088->dt_accl_ = time - bmi088->last_accl_int_time_;
-          bmi088->last_accl_int_time_ = time;
-          bmi088->new_data_.PostFromCallback(in_isr);
-          bmi088->new_data_accl_.PostFromCallback(in_isr);
-        },
-        this);
 
     auto gyro_int_cb = LibXR::GPIO::Callback::Create(
         [](bool in_isr, BMI088 *bmi088) {
@@ -226,19 +215,17 @@ class BMI088 : public LibXR::Application {
           bmi088->dt_gyro_ = time - bmi088->last_gyro_int_time_;
           bmi088->last_gyro_int_time_ = time;
           bmi088->new_data_.PostFromCallback(in_isr);
-          bmi088->new_data_gyro_.PostFromCallback(in_isr);
         },
         this);
 
-    int_accl_->RegisterCallback(accl_int_cb);
     int_gyro_->RegisterCallback(gyro_int_cb);
 
     while (!Init()) {
-      XR_LOG_ERROR("BMI088: Init failed. Try again.\r\n");
+      XR_LOG_ERROR("BMI088: Init failed. Try again.");
       LibXR::Thread::Sleep(100);
     }
 
-    XR_LOG_PASS("BMI088: Init succeeded.\r\n");
+    XR_LOG_PASS("BMI088: Init succeeded.");
 
     thread_.Create(this, ThreadFunc, "bmi088_thread", task_stack_depth,
                    LibXR::Thread::Priority::REALTIME);
@@ -282,17 +269,9 @@ class BMI088 : public LibXR::Application {
     WriteSingle(Device::ACCELMETER, BMI088_REG_ACCL_RANGE,
                 static_cast<uint8_t>(accel_range_));
 
-    /* INT1 as output. Push-pull. Active low. Output. */
-    WriteSingle(Device::ACCELMETER, BMI088_REG_ACCL_INT1_IO_CONF, 0x08);
-
-    /* Map data ready interrupt to INT1. */
-    WriteSingle(Device::ACCELMETER, BMI088_REG_ACCL_INT1_INT2_MAP_DATA, 0x04);
-
     /* Turn on accl. Now we can read data. */
     WriteSingle(Device::ACCELMETER, BMI088_REG_ACCL_PWR_CTRL, 0x04);
     LibXR::Thread::Sleep(50);
-
-    int_accl_->EnableInterrupt();
 
     /* Gyro init. */
     /* 0x00: +-2000. 0x01: +-1000. 0x02: +-500. 0x03: +-250. 0x04: +-125. */
@@ -304,7 +283,7 @@ class BMI088 : public LibXR::Application {
                 static_cast<uint8_t>(gyro_freq_));
 
     /* INT3 and INT4 as output. Push-pull. Active low. */
-    WriteSingle(Device::GYROSCOPE, BMI088_REG_GYRO_INT3_INT4_IO_CONF, 0x00);
+    WriteSingle(Device::GYROSCOPE, BMI088_REG_GYRO_INT3_INT4_IO_CONF, 0x05);
 
     /* Map data ready interrupt to INT3. */
     WriteSingle(Device::GYROSCOPE, BMI088_REG_GYRO_INT3_INT4_IO_MAP, 0x01);
@@ -326,12 +305,12 @@ class BMI088 : public LibXR::Application {
         std::isnan(gyro_data_.z()) || std::isnan(accl_data_.x()) ||
         std::isnan(accl_data_.y()) || std::isnan(accl_data_.z())) {
       XR_LOG_WARN(
-          "BMI088: NaN data detected. gyro: %f %f %f, accl: %f %f %f\r\n",
+          "BMI088: NaN data detected. gyro: %f %f %f, accl: %f %f %f",
           gyro_data_.x(), gyro_data_.y(), gyro_data_.z(), accl_data_.x(),
           accl_data_.y(), accl_data_.z());
     }
 
-    float ideal_gyro_dt = 0.0f, ideal_accl_dt = 0.0f;
+    float ideal_gyro_dt = 0.0f;
     switch (gyro_freq_) {
       case GyroFreq::GYRO_2000HZ_BW532HZ:
       case GyroFreq::GYRO_2000HZ_BW230HZ:
@@ -353,39 +332,11 @@ class BMI088 : public LibXR::Application {
         break;
     }
 
-    switch (accl_freq_) {
-      case AcclFreq::ACCL_1600HZ:
-        ideal_accl_dt = 0.000625f;
-        break;
-      case AcclFreq::ACCL_800HZ:
-        ideal_accl_dt = 0.00125f;
-        break;
-      case AcclFreq::ACCL_400HZ:
-        ideal_accl_dt = 0.0025f;
-        break;
-      case AcclFreq::ACCL_200HZ:
-        ideal_accl_dt = 0.005f;
-        break;
-      case AcclFreq::ACCL_100HZ:
-        ideal_accl_dt = 0.01f;
-        break;
-      case AcclFreq::ACCL_50HZ:
-        ideal_accl_dt = 0.02f;
-        break;
-      case AcclFreq::ACCL_25HZ:
-        ideal_accl_dt = 0.04f;
-        break;
-      case AcclFreq::ACCL_12_5HZ:
-        ideal_accl_dt = 0.08f;
-        break;
-    }
-
     /* Use other timer as HAL timebase (Because the priority of SysTick is
   lowest) and set the priority to the highest to avoid this issue */
-    if (std::fabs(ideal_accl_dt - dt_accl_.ToSecondf()) > 0.0003f ||
-        std::fabs(ideal_gyro_dt - dt_gyro_.ToSecondf()) > 0.0003f) {
-      XR_LOG_WARN("BMI088 Frequency Error: gyro: %6f, accl: %6f\r\n",
-                  dt_gyro_.ToSecondf(), dt_accl_.ToSecondf());
+    if (std::fabs(ideal_gyro_dt - dt_gyro_.ToSecondf()) > 0.0003f) {
+      XR_LOG_WARN("BMI088 Frequency Error: %6f",
+                  dt_gyro_.ToSecondf());
     }
   }
 
@@ -397,20 +348,14 @@ class BMI088 : public LibXR::Application {
 
     while (true) {
       if (bmi088->new_data_.Wait(50) == ErrorCode::OK) {
-        if (bmi088->new_data_accl_.Wait(0) == ErrorCode::OK) {
-          bmi088->RecvAccel();
-          bmi088->ParseAccelData();
-
-          bmi088->topic_accl_.Publish(bmi088->accl_data_);
-        }
-
-        if (bmi088->new_data_gyro_.Wait(0) == ErrorCode::OK) {
-          bmi088->RecvGyro();
-          bmi088->ParseGyroData();
-          bmi088->topic_gyro_.Publish(bmi088->gyro_data_);
-        }
+        bmi088->RecvGyro();
+        bmi088->ParseGyroData();
+        bmi088->RecvAccel();
+        bmi088->ParseAccelData();
+        bmi088->topic_accl_.Publish(bmi088->accl_data_);
+        bmi088->topic_gyro_.Publish(bmi088->gyro_data_);
       } else {
-        XR_LOG_WARN("BMI088 wait timeout.\r\n");
+        XR_LOG_WARN("BMI088 wait timeout.");
       }
     }
   }
@@ -652,24 +597,21 @@ class BMI088 : public LibXR::Application {
   float temperature_ = 0.0f;
 
   LibXR::MicrosecondTimestamp last_gyro_int_time_ = 0;
-  LibXR::MicrosecondTimestamp last_accl_int_time_ = 0;
   LibXR::MicrosecondTimestamp::Duration dt_gyro_ = 0;
-  LibXR::MicrosecondTimestamp::Duration dt_accl_ = 0;
 
   float target_temperature_ = 25.0f;
 
   uint8_t rw_buffer_[20];
   Eigen::Matrix<float, 3, 1> gyro_data_, accl_data_;
   LibXR::Topic topic_gyro_, topic_accl_;
-  LibXR::GPIO *cs_accl_, *cs_gyro_, *int_accl_, *int_gyro_;
+  LibXR::GPIO *cs_accl_, *cs_gyro_, *int_gyro_;
   LibXR::SPI *spi_;
   LibXR::PWM *pwm_;
 
   LibXR::Quaternion<float> rotation_;
 
   LibXR::PID<float> pid_heat_;
-
-  LibXR::Semaphore sem_spi_, new_data_, new_data_gyro_, new_data_accl_;
+  LibXR::Semaphore sem_spi_, new_data_;
   LibXR::SPI::OperationRW op_spi_;
 
   LibXR::RamFS::File cmd_file_;
