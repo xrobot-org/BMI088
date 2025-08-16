@@ -208,7 +208,6 @@ class BMI088 : public LibXR::Application {
 
     int_gyro_->DisableInterrupt();
 
-
     auto gyro_int_cb = LibXR::GPIO::Callback::Create(
         [](bool in_isr, BMI088 *bmi088) {
           auto time = LibXR::Timebase::GetMicroseconds();
@@ -217,6 +216,9 @@ class BMI088 : public LibXR::Application {
           bmi088->new_data_.PostFromCallback(in_isr);
         },
         this);
+
+    int_gyro_->SetConfig({.direction = LibXR::GPIO::Direction::FALL_INTERRUPT,
+                          .pull = LibXR::GPIO::Pull::NONE});
 
     int_gyro_->RegisterCallback(gyro_int_cb);
 
@@ -283,7 +285,7 @@ class BMI088 : public LibXR::Application {
                 static_cast<uint8_t>(gyro_freq_));
 
     /* INT3 and INT4 as output. Push-pull. Active low. */
-    WriteSingle(Device::GYROSCOPE, BMI088_REG_GYRO_INT3_INT4_IO_CONF, 0x05);
+    WriteSingle(Device::GYROSCOPE, BMI088_REG_GYRO_INT3_INT4_IO_CONF, 0x00);
 
     /* Map data ready interrupt to INT3. */
     WriteSingle(Device::GYROSCOPE, BMI088_REG_GYRO_INT3_INT4_IO_MAP, 0x01);
@@ -304,10 +306,9 @@ class BMI088 : public LibXR::Application {
         std::isnan(gyro_data_.x()) || std::isnan(gyro_data_.y()) ||
         std::isnan(gyro_data_.z()) || std::isnan(accl_data_.x()) ||
         std::isnan(accl_data_.y()) || std::isnan(accl_data_.z())) {
-      XR_LOG_WARN(
-          "BMI088: NaN data detected. gyro: %f %f %f, accl: %f %f %f",
-          gyro_data_.x(), gyro_data_.y(), gyro_data_.z(), accl_data_.x(),
-          accl_data_.y(), accl_data_.z());
+      XR_LOG_WARN("BMI088: NaN data detected. gyro: %f %f %f, accl: %f %f %f",
+                  gyro_data_.x(), gyro_data_.y(), gyro_data_.z(),
+                  accl_data_.x(), accl_data_.y(), accl_data_.z());
     }
 
     float ideal_gyro_dt = 0.0f;
@@ -335,8 +336,7 @@ class BMI088 : public LibXR::Application {
     /* Use other timer as HAL timebase (Because the priority of SysTick is
   lowest) and set the priority to the highest to avoid this issue */
     if (std::fabs(ideal_gyro_dt - dt_gyro_.ToSecondf()) > 0.0003f) {
-      XR_LOG_WARN("BMI088 Frequency Error: %6f",
-                  dt_gyro_.ToSecondf());
+      XR_LOG_WARN("BMI088 Frequency Error: %6f", dt_gyro_.ToSecondf());
     }
   }
 
@@ -402,14 +402,14 @@ class BMI088 : public LibXR::Application {
 
     for (int i = 0; i < 3; i++) {
       raw_int16[i] = static_cast<int16_t>(
-          (static_cast<uint16_t>(rw_buffer_[i * 2 + 2]) << 8) |
-          static_cast<uint16_t>(rw_buffer_[i * 2 + 1]));
+          (static_cast<uint8_t>(rw_buffer_[i * 2 + 2]) << 8) |
+          static_cast<uint8_t>(rw_buffer_[i * 2 + 1]));
       raw[i] = static_cast<float>(raw_int16[i]) * range;
     }
 
     int16_t raw_temp =
-        static_cast<int16_t>((static_cast<uint16_t>(rw_buffer_[17]) << 3) |
-                             (static_cast<uint16_t>(rw_buffer_[18]) >> 5));
+        static_cast<int16_t>((static_cast<uint8_t>(rw_buffer_[17]) << 3) |
+                             (static_cast<uint8_t>(rw_buffer_[18]) >> 5));
     if (raw_temp > 1023) {
       raw_temp -= 2048;
     }
@@ -450,8 +450,8 @@ class BMI088 : public LibXR::Application {
 
     for (int i = 0; i < 3; i++) {
       raw_int16[i] = static_cast<int16_t>(
-          (static_cast<uint16_t>(rw_buffer_[i * 2 + 1]) << 8) |
-          static_cast<uint16_t>(rw_buffer_[i * 2]));
+          (static_cast<uint8_t>(rw_buffer_[i * 2 + 1]) << 8) |
+          static_cast<uint8_t>(rw_buffer_[i * 2]));
       raw[i] = static_cast<float>(raw_int16[i]) * range * M_DEG2RAD_MULT;
     }
 
