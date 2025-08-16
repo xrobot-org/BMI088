@@ -495,15 +495,15 @@ class BMI088 : public LibXR::Application {
         bmi088->gyro_data_key_.data_.x() = 0.0,
         bmi088->gyro_data_key_.data_.y() = 0.0,
         bmi088->gyro_data_key_.data_.z() = 0.0;
-        LibXR::Thread::Sleep(3000);
         bmi088->gyro_cali_ = Eigen::Matrix<int64_t, 3, 1>(0.0, 0.0, 0.0);
         bmi088->cali_counter_ = 0;
         bmi088->in_cali_ = true;
         LibXR::STDIO::Printf(
             "Starting gyroscope calibration. Please keep the device "
             "steady.\r\n");
-        for (int i = 0; i < 60; i++) {
-          LibXR::STDIO::Printf("Progress: %d / 60\r", i);
+        LibXR::Thread::Sleep(3000);
+        for (int i = 0; i < 120; i++) {
+          LibXR::STDIO::Printf("Progress: %d / 120\r", i);
           LibXR::Thread::Sleep(1000);
         }
         LibXR::STDIO::Printf("\r\nProgress: Done\r\n");
