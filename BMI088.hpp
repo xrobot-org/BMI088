@@ -560,8 +560,8 @@ class BMI088 : public LibXR::Application {
       }
     } else if (argc == 4) {
       if (strcmp(argv[1], "show") == 0) {
-        int time = std::stoi(argv[2]);
-        int delay = std::stoi(argv[3]);
+        int time = std::atoi(argv[2]);
+        int delay = std::atoi(argv[3]);
 
         delay = std::clamp(delay, 2, 1000);
 
