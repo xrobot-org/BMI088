@@ -377,7 +377,7 @@ class BMI088 : public LibXR::Application {
     bmi088->pwm_->Enable();
 
     while (true) {
-      if (bmi088->new_data_.Wait(50) == ErrorCode::OK) {
+      if (bmi088->new_data_.Wait(50) == LibXR::ErrorCode::OK) {
         bmi088->RecvGyro();
         bmi088->ParseGyroData();
         bmi088->RecvAccel();
