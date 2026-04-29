@@ -509,20 +509,16 @@ class BMI088 : public LibXR::Application {
  private:
   static int CommandFunc(BMI088* bmi088, int argc, char** argv) {
     if (argc == 1) {
-      LibXR::STDIO::Printf("Usage:\r\n");
-      LibXR::STDIO::Printf(
-          "  show [time_ms] [interval_ms] - Print sensor data "
-          "periodically.\r\n");
-      LibXR::STDIO::Printf(
-          "  list_offset                  - Show current gyro calibration "
-          "offset.\r\n");
-      LibXR::STDIO::Printf(
-          "  cali                         - Start gyroscope "
-          "calibration.\r\n");
+      LibXR::STDIO::Printf<"Usage:\r\n">();
+      LibXR::STDIO::Printf<"  show [time_ms] [interval_ms] - Print sensor data "
+          "periodically.\r\n">();
+      LibXR::STDIO::Printf<"  list_offset                  - Show current gyro calibration "
+          "offset.\r\n">();
+      LibXR::STDIO::Printf<"  cali                         - Start gyroscope "
+          "calibration.\r\n">();
     } else if (argc == 2) {
       if (strcmp(argv[1], "list_offset") == 0) {
-        LibXR::STDIO::Printf(
-            "Current calibration offset - x: %f, y: %f, z: %f\r\n",
+        LibXR::STDIO::Printf<"Current calibration offset - x: %f, y: %f, z: %f\r\n">(
             bmi088->gyro_data_key_.data_.x(), bmi088->gyro_data_key_.data_.y(),
             bmi088->gyro_data_key_.data_.z());
       } else if (strcmp(argv[1], "cali") == 0) {
@@ -532,15 +528,14 @@ class BMI088 : public LibXR::Application {
         bmi088->gyro_cali_ = Eigen::Matrix<int64_t, 3, 1>(0.0, 0.0, 0.0);
         bmi088->cali_counter_ = 0;
         bmi088->in_cali_ = true;
-        LibXR::STDIO::Printf(
-            "Starting gyroscope calibration. Please keep the device "
-            "steady.\r\n");
+        LibXR::STDIO::Printf<"Starting gyroscope calibration. Please keep the device "
+            "steady.\r\n">();
         LibXR::Thread::Sleep(3000);
         for (int i = 0; i < 120; i++) {
-          LibXR::STDIO::Printf("Progress: %d / 120\r", i);
+          LibXR::STDIO::Printf<"Progress: %d / 120\r">(i);
           LibXR::Thread::Sleep(1000);
         }
-        LibXR::STDIO::Printf("\r\nProgress: Done\r\n");
+        LibXR::STDIO::Printf<"\r\nProgress: Done\r\n">();
         bmi088->in_cali_ = false;
         LibXR::Thread::Sleep(1000);
 
@@ -557,25 +552,24 @@ class BMI088 : public LibXR::Application {
             static_cast<double>(bmi088->cali_counter_) * bmi088->GetGyroLSB() *
             M_DEG2RAD_MULT);
 
-        LibXR::STDIO::Printf("\r\nCalibration result - x: %f, y: %f, z: %f\r\n",
+        LibXR::STDIO::Printf<"\r\nCalibration result - x: %f, y: %f, z: %f\r\n">(
                              bmi088->gyro_data_key_.data_.x(),
                              bmi088->gyro_data_key_.data_.y(),
                              bmi088->gyro_data_key_.data_.z());
 
-        LibXR::STDIO::Printf("Analyzing calibration quality...\r\n");
+        LibXR::STDIO::Printf<"Analyzing calibration quality...\r\n">();
         bmi088->gyro_cali_ = Eigen::Matrix<int64_t, 3, 1>(0.0, 0.0, 0.0);
         bmi088->cali_counter_ = 0;
         bmi088->in_cali_ = true;
         for (int i = 0; i < 60; i++) {
-          LibXR::STDIO::Printf("Progress: %d / 60\r", i);
+          LibXR::STDIO::Printf<"Progress: %d / 60\r">(i);
           LibXR::Thread::Sleep(1000);
         }
-        LibXR::STDIO::Printf("\r\nProgress: Done\r\n");
+        LibXR::STDIO::Printf<"\r\nProgress: Done\r\n">();
         bmi088->in_cali_ = false;
         LibXR::Thread::Sleep(1000);
 
-        LibXR::STDIO::Printf(
-            "\r\nCalibration error - x: %f, y: %f, z: %f\r\n",
+        LibXR::STDIO::Printf<"\r\nCalibration error - x: %f, y: %f, z: %f\r\n">(
             static_cast<double>(bmi088->gyro_cali_.data()[0]) /
                     static_cast<double>(bmi088->cali_counter_) *
                     bmi088->GetGyroLSB() * M_DEG2RAD_MULT -
@@ -590,7 +584,7 @@ class BMI088 : public LibXR::Application {
                 bmi088->gyro_data_key_.data_.z());
 
         bmi088->gyro_data_key_.Set(bmi088->gyro_data_key_.data_);
-        LibXR::STDIO::Printf("Calibration data saved.\r\n");
+        LibXR::STDIO::Printf<"Calibration data saved.\r\n">();
       }
     } else if (argc == 4) {
       if (strcmp(argv[1], "show") == 0) {
@@ -600,9 +594,8 @@ class BMI088 : public LibXR::Application {
         delay = std::clamp(delay, 2, 1000);
 
         while (time > 0) {
-          LibXR::STDIO::Printf(
-              "Accel: x = %+5f, y = %+5f, z = %+5f | "
-              "Gyro: x = %+5f, y = %+5f, z = %+5f | Temp: %+5f\r\n",
+          LibXR::STDIO::Printf<"Accel: x = %+5f, y = %+5f, z = %+5f | "
+              "Gyro: x = %+5f, y = %+5f, z = %+5f | Temp: %+5f\r\n">(
               bmi088->accl_data_.x(), bmi088->accl_data_.y(),
               bmi088->accl_data_.z(), bmi088->gyro_data_.x(),
               bmi088->gyro_data_.y(), bmi088->gyro_data_.z(),
@@ -612,7 +605,7 @@ class BMI088 : public LibXR::Application {
         }
       }
     } else {
-      LibXR::STDIO::Printf("Error: Invalid arguments.\r\n");
+      LibXR::STDIO::Printf<"Error: Invalid arguments.\r\n">();
       return -1;
     }
 
