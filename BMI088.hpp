@@ -36,6 +36,7 @@ depends: []
 
 #include "app_framework.hpp"
 #include "gpio.hpp"
+#include "lockfree_queue.hpp"
 #include "message.hpp"
 #include "pid.hpp"
 #include "pwm.hpp"
@@ -229,9 +230,18 @@ class BMI088 : public LibXR::Application {
 
     auto gyro_int_cb = LibXR::GPIO::Callback::Create(
         [](bool in_isr, BMI088* bmi088) {
-          auto time = LibXR::Timebase::GetMicroseconds();
-          bmi088->dt_gyro_ = time - bmi088->last_gyro_int_time_;
-          bmi088->last_gyro_int_time_ = time;
+          auto timestamp = LibXR::Timebase::GetMicroseconds();
+          bmi088->dt_gyro_ = timestamp - bmi088->last_gyro_int_time_;
+          bmi088->last_gyro_int_time_ = timestamp;
+
+          if (bmi088->sample_timestamp_queue_.Push(timestamp) !=
+              LibXR::ErrorCode::OK) {
+            LibXR::MicrosecondTimestamp dropped_timestamp;
+            (void)bmi088->sample_timestamp_queue_.Pop(dropped_timestamp);
+            (void)bmi088->sample_timestamp_queue_.Push(timestamp);
+            bmi088->sample_timestamp_overflow_count_++;
+          }
+
           bmi088->new_data_.PostFromCallback(in_isr);
         },
         this);
@@ -364,6 +374,12 @@ class BMI088 : public LibXR::Application {
     if (std::fabs(ideal_gyro_dt - dt_gyro_.ToSecondf()) > 0.0003f) {
       XR_LOG_WARN("BMI088 Frequency Error: %6f", dt_gyro_.ToSecondf());
     }
+
+    if (sample_timestamp_overflow_count_ != 0) {
+      XR_LOG_WARN("BMI088 timestamp queue overflow: %d",
+                  static_cast<int>(sample_timestamp_overflow_count_));
+      sample_timestamp_overflow_count_ = 0;
+    }
   }
 
   /**
@@ -378,12 +394,18 @@ class BMI088 : public LibXR::Application {
 
     while (true) {
       if (bmi088->new_data_.Wait(50) == LibXR::ErrorCode::OK) {
+        LibXR::MicrosecondTimestamp sample_timestamp;
+        if (bmi088->sample_timestamp_queue_.Pop(sample_timestamp) !=
+            LibXR::ErrorCode::OK) {
+          sample_timestamp = bmi088->last_gyro_int_time_;
+        }
+
         bmi088->RecvGyro();
         bmi088->ParseGyroData();
         bmi088->RecvAccel();
         bmi088->ParseAccelData();
-        bmi088->topic_accl_.Publish(bmi088->accl_data_);
-        bmi088->topic_gyro_.Publish(bmi088->gyro_data_);
+        bmi088->topic_accl_.Publish(bmi088->accl_data_, sample_timestamp);
+        bmi088->topic_gyro_.Publish(bmi088->gyro_data_, sample_timestamp);
       } else {
         XR_LOG_WARN("BMI088 wait timeout.");
       }
@@ -622,6 +644,11 @@ class BMI088 : public LibXR::Application {
   Eigen::Matrix<std::int64_t, 3, 1> gyro_cali_;
 
   float temperature_ = 0.0f;
+
+  static constexpr size_t SAMPLE_TIMESTAMP_QUEUE_LENGTH = 16;
+  LibXR::LockFreeQueue<LibXR::MicrosecondTimestamp> sample_timestamp_queue_{
+      SAMPLE_TIMESTAMP_QUEUE_LENGTH};
+  uint32_t sample_timestamp_overflow_count_ = 0;
 
   LibXR::MicrosecondTimestamp last_gyro_int_time_ = 0;
   LibXR::MicrosecondTimestamp::Duration dt_gyro_ = 0;

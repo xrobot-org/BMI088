@@ -4,14 +4,18 @@
 BMI088 IMU 驱动模块。负责传感器初始化、数据采样解析和温控输出。
 Manifest 描述：博世 BMI088 6 轴惯性测量单元（IMU）的驱动模块 / Driver module for Bosch BMI088 6-axis Inertial Measurement Unit (IMU)
 
-## 2. 主要函数说明
+## 2. 时间戳约定
+
+`bmi088_gyro` 与 `bmi088_accl` 使用同一次 gyro data-ready interrupt 采集到的时间戳发布。payload 中不再额外携带采样时间，消费者应读取 Topic envelope timestamp。
+
+## 3. 主要函数说明
 1. Init: 初始化 BMI088 寄存器与工作模式。
-2. ThreadFunc: 周期采样并发布陀螺仪/加速度数据。
+2. ThreadFunc: 等待 gyro INT，采样并用 gyro INT 时间戳发布陀螺仪/加速度数据。
 3. RecvAccel / RecvGyro + ParseAccelData / ParseGyroData: 读取并解析原始数据。
 4. ControlTemperature: 温控 PID 输出。
 5. CommandFunc: 命令行查看模块状态。
 
-## 3. 接入步骤
+## 4. 接入步骤
 1. 添加模块并配置 SPI、CS、INT、加热 PWM 参数。
 2. 配置输出 Topic 名称与温控参数。
 3. 启动后先确认初始化成功，再检查数据更新。
@@ -21,7 +25,7 @@ Manifest 描述：博世 BMI088 6 轴惯性测量单元（IMU）的驱动模块 
     xrobot_gen_main
     cube-cmake --build /home/leo/Documents/bsp-dev-c/build/debug --
 
-## 4. 配置示例（YAML）
+## 5. 配置示例（YAML）
 module: BMI088
 entry_header: Modules/BMI088/BMI088.hpp
 constructor_args:
@@ -49,7 +53,7 @@ constructor_args:
 template_args:
 []
 
-## 5. 依赖与硬件
+## 6. 依赖与硬件
 Required Hardware:
 - spi_bmi088/spi1/SPI1
 - bmi088_accl_cs
@@ -62,5 +66,5 @@ Required Hardware:
 Depends:
 []
 
-## 6. 代码入口
+## 7. 代码入口
 Modules/BMI088/BMI088.hpp
