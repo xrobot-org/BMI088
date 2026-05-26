@@ -26,7 +26,7 @@ constructor_args:
   - target_temperature: 45
   - task_stack_depth: 2048
 template_args: []
-required_hardware: spi_bmi088/spi1/SPI1 bmi088_accl_cs bmi088_gyro_cs bmi088_gyro_int pwm_bmi088_heat ramfs database
+required_hardware: spi_bmi088/spi2/SPI2 bmi088_accl_cs bmi088_gyro_cs bmi088_gyro_int pwm_bmi088_heat spi2_mutex ramfs database
 depends: []
 === END MANIFEST === */
 // clang-format on
@@ -37,6 +37,7 @@ depends: []
 #include "app_framework.hpp"
 #include "gpio.hpp"
 #include "message.hpp"
+#include "mutex.hpp"
 #include "pid.hpp"
 #include "pwm.hpp"
 #include "spi.hpp"
@@ -96,6 +97,26 @@ depends: []
  */
 class BMI088 : public LibXR::Application {
  public:
+  class OptionalBusLock {
+   public:
+    explicit OptionalBusLock(LibXR::Mutex* mutex) : mutex_(mutex) {
+      if (mutex_ != nullptr) {
+        mutex_->Lock();
+      }
+    }
+
+#include <atomic>
+
+    ~OptionalBusLock() {
+      if (mutex_ != nullptr) {
+        mutex_->Unlock();
+      }
+    }
+
+   private:
+    LibXR::Mutex* mutex_;
+  };
+
   enum class Device : uint8_t { ACCELMETER, GYROSCOPE };
 
   enum class GyroRange : uint8_t {
@@ -137,6 +158,10 @@ class BMI088 : public LibXR::Application {
 
   static constexpr float M_DEG2RAD_MULT = 0.01745329251f;
 
+  void RequestGyroCalibration() {
+    gyro_cali_requested_.store(true, std::memory_order_release);
+  }
+
   void Select(Device device) {
     if (device == Device::ACCELMETER) {
       cs_accl_->Write(false);
@@ -154,6 +179,7 @@ class BMI088 : public LibXR::Application {
   }
 
   void WriteSingle(Device device, uint8_t reg, uint8_t data) {
+    OptionalBusLock bus_lock(spi_mutex_);
     Select(device);
     spi_->MemWrite(reg, data, op_spi_);
     Deselect(device);
@@ -163,6 +189,7 @@ class BMI088 : public LibXR::Application {
   }
 
   uint8_t ReadSingle(Device device, uint8_t reg) {
+    OptionalBusLock bus_lock(spi_mutex_);
     Select(device);
     spi_->MemRead(reg, {rw_buffer_, 2}, op_spi_);
     Deselect(device);
@@ -175,6 +202,7 @@ class BMI088 : public LibXR::Application {
   }
 
   void Read(Device device, uint8_t reg, uint8_t len) {
+    OptionalBusLock bus_lock(spi_mutex_);
     Select(device);
     spi_->MemRead(reg, {rw_buffer_, len}, op_spi_);
     Deselect(device);
@@ -212,8 +240,9 @@ class BMI088 : public LibXR::Application {
         cs_gyro_(hw.template FindOrExit<LibXR::GPIO>({"bmi088_gyro_cs"})),
         int_gyro_(hw.template FindOrExit<LibXR::GPIO>({"bmi088_gyro_int"})),
         spi_(
-            hw.template FindOrExit<LibXR::SPI>({"spi_bmi088", "spi1", "SPI1"})),
+            hw.template FindOrExit<LibXR::SPI>({"spi_bmi088", "spi2", "SPI2"})),
         pwm_(hw.template FindOrExit<LibXR::PWM>({"pwm_bmi088_heat"})),
+        spi_mutex_(hw.template Find<LibXR::Mutex>({"spi_bmi088_mutex", "spi2_mutex"})),
         rotation_(std::move(rotation)),
         pid_heat_(pid_param),
         op_spi_(sem_spi_),
@@ -224,6 +253,21 @@ class BMI088 : public LibXR::Application {
     app.Register(*this);
 
     hw.template FindOrExit<LibXR::RamFS>({"ramfs"})->Add(cmd_file_);
+
+    ASSERT(spi_->SetConfig({.clock_polarity = LibXR::SPI::ClockPolarity::HIGH,
+                            .clock_phase = LibXR::SPI::ClockPhase::EDGE_2,
+                            .prescaler = LibXR::SPI::Prescaler::DIV_16}) ==
+           LibXR::ErrorCode::OK);
+
+    cs_accl_->SetConfig({.direction = LibXR::GPIO::Direction::OUTPUT_PUSH_PULL,
+                         .pull = LibXR::GPIO::Pull::NONE});
+    cs_gyro_->SetConfig({.direction = LibXR::GPIO::Direction::OUTPUT_PUSH_PULL,
+                         .pull = LibXR::GPIO::Pull::NONE});
+    Deselect(Device::ACCELMETER);
+    Deselect(Device::GYROSCOPE);
+
+    // BMI088 accelerometer powers up in I2C mode and switches to SPI after a CS rising edge.
+    (void)ReadSingle(Device::ACCELMETER, BMI088_REG_ACCL_CHIP_ID);
 
     int_gyro_->DisableInterrupt();
 
@@ -238,40 +282,18 @@ class BMI088 : public LibXR::Application {
         },
         this);
 
-    int_gyro_->SetConfig({.direction = LibXR::GPIO::Direction::FALL_INTERRUPT,
+    int_gyro_->SetConfig({.direction = LibXR::GPIO::Direction::RISING_INTERRUPT,
                           .pull = LibXR::GPIO::Pull::NONE});
 
     int_gyro_->RegisterCallback(gyro_int_cb);
 
-    while (!Init()) {
-      XR_LOG_ERROR("BMI088: Init failed. Try again.");
-      LibXR::Thread::Sleep(100);
-    }
-
-    XR_LOG_PASS("BMI088: Init succeeded.");
-
-    thread_.Create(this, ThreadFunc, "bmi088_thread", task_stack_depth,
-                   LibXR::Thread::Priority::REALTIME);
-
-    void (*temp_ctrl_func)(BMI088*) = [](BMI088* bmi088) {
-      bmi088->ControlTemperature(0.05f);
-    };
-
-    auto temp_ctrl_task = LibXR::Timer::CreateTask(temp_ctrl_func, this, 50);
-
-    LibXR::Timer::Add(temp_ctrl_task);
-    LibXR::Timer::Start(temp_ctrl_task);
-  }
-
-  /**
-   * @brief 初始化 BMI088
-   * @return bool 初始化成功返回 true
-   */
-  bool Init() {
     WriteSingle(Device::ACCELMETER, BMI088_REG_ACCL_SOFTRESET, 0xB6);
     WriteSingle(Device::GYROSCOPE, BMI088_REG_GYRO_SOFTRESET, 0xB6);
 
     LibXR::Thread::Sleep(30);
+
+    // The accelerometer interface returns to I2C after reset and needs another dummy read.
+    (void)ReadSingle(Device::ACCELMETER, BMI088_REG_ACCL_CHIP_ID);
 
     /* Need to read chip id twice */
     ReadSingle(Device::ACCELMETER, BMI088_REG_ACCL_CHIP_ID);
@@ -280,12 +302,8 @@ class BMI088 : public LibXR::Application {
     auto accl_id = ReadSingle(Device::ACCELMETER, BMI088_REG_ACCL_CHIP_ID);
     auto gyro_id = ReadSingle(Device::GYROSCOPE, BMI088_REG_GYRO_CHIP_ID);
 
-    if (accl_id != BMI088_CHIP_ID_ACCL) {
-      return false;
-    }
-    if (gyro_id != BMI088_CHIP_ID_GYRO) {
-      return false;
-    }
+    ASSERT(accl_id == BMI088_CHIP_ID_ACCL);
+    ASSERT(gyro_id == BMI088_CHIP_ID_GYRO);
 
     /* Accl init. */
     /* Filter setting: OSR4. */
@@ -309,8 +327,8 @@ class BMI088 : public LibXR::Application {
     WriteSingle(Device::GYROSCOPE, BMI088_REG_GYRO_BANDWIDTH,
                 static_cast<uint8_t>(gyro_freq_));
 
-    /* INT3 and INT4 as output. Push-pull. Active low. */
-    WriteSingle(Device::GYROSCOPE, BMI088_REG_GYRO_INT3_INT4_IO_CONF, 0x00);
+    /* Align legacy ANO_PioneerPro-088: INT3 push-pull, active high. */
+    WriteSingle(Device::GYROSCOPE, BMI088_REG_GYRO_INT3_INT4_IO_CONF, 0x01);
 
     /* Map data ready interrupt to INT3. */
     WriteSingle(Device::GYROSCOPE, BMI088_REG_GYRO_INT3_INT4_IO_MAP, 0x01);
@@ -321,7 +339,19 @@ class BMI088 : public LibXR::Application {
     LibXR::Thread::Sleep(50);
     int_gyro_->EnableInterrupt();
 
-    return true;
+    XR_LOG_PASS("BMI088: Init succeeded.");
+
+    thread_.Create(this, ThreadFunc, "bmi088_thread", task_stack_depth,
+                   LibXR::Thread::Priority::REALTIME);
+
+    void (*temp_ctrl_func)(BMI088*) = [](BMI088* bmi088) {
+      bmi088->ControlTemperature(0.05f);
+    };
+
+    auto temp_ctrl_task = LibXR::Timer::CreateTask(temp_ctrl_func, this, 50);
+
+    LibXR::Timer::Add(temp_ctrl_task);
+    LibXR::Timer::Start(temp_ctrl_task);
   }
 
   /**
@@ -374,20 +404,21 @@ class BMI088 : public LibXR::Application {
    */
   static void ThreadFunc(BMI088* bmi088) {
     /* Start PWM */
-    bmi088->pwm_->SetConfig({30000});
+    /* Align legacy ANO_PioneerPro-088 TIM10 heating PWM frequency. */
+    bmi088->pwm_->SetConfig({2000});
     bmi088->pwm_->SetDutyCycle(0);
     bmi088->pwm_->Enable();
 
     while (true) {
       if (bmi088->new_data_.Wait(50) == LibXR::ErrorCode::OK) {
-        const auto sample_timestamp = bmi088->sample_timestamp_;
-
+        bmi088->CheckCalibrationRequest();
         bmi088->RecvGyro();
         bmi088->ParseGyroData();
         bmi088->RecvAccel();
         bmi088->ParseAccelData();
-        bmi088->topic_accl_.Publish(bmi088->accl_data_, sample_timestamp);
-        bmi088->topic_gyro_.Publish(bmi088->gyro_data_, sample_timestamp);
+        bmi088->topic_accl_.Publish(bmi088->accl_data_);
+        bmi088->topic_gyro_.Publish(bmi088->gyro_data_);
+        bmi088->TryFinalizeGyroCalibration();
       } else {
         XR_LOG_WARN("BMI088 wait timeout.");
       }
@@ -430,6 +461,8 @@ class BMI088 : public LibXR::Application {
         return 1.0 / 10920.0;
         break;
     }
+
+    return 0.0f;
   }
 
   void ParseAccelData(void) {
@@ -479,6 +512,8 @@ class BMI088 : public LibXR::Application {
         return 1.0 / 262.144;
         break;
     }
+
+    return 0.0f;
   }
 
   void ParseGyroData(void) {
@@ -510,85 +545,63 @@ class BMI088 : public LibXR::Application {
                         gyro_data_key_.data_);
   }
 
+  void BeginGyroCalibration() {
+    gyro_data_key_.data_.x() = 0.0f;
+    gyro_data_key_.data_.y() = 0.0f;
+    gyro_data_key_.data_.z() = 0.0f;
+    gyro_cali_ = Eigen::Matrix<int64_t, 3, 1>(0, 0, 0);
+    cali_counter_ = 0;
+    in_cali_ = true;
+    XR_LOG_PASS("BMI088: Gyro calibration started.");
+  }
+
+  void TryFinalizeGyroCalibration() {
+    if (!in_cali_ || cali_counter_ < calibration_target_samples_) {
+      return;
+    }
+
+    in_cali_ = false;
+
+    gyro_data_key_.data_.x() = static_cast<float>(
+        static_cast<double>(gyro_cali_.data()[0]) /
+        static_cast<double>(cali_counter_) * GetGyroLSB() * M_DEG2RAD_MULT);
+    gyro_data_key_.data_.y() = static_cast<float>(
+        static_cast<double>(gyro_cali_.data()[1]) /
+        static_cast<double>(cali_counter_) * GetGyroLSB() * M_DEG2RAD_MULT);
+    gyro_data_key_.data_.z() = static_cast<float>(
+        static_cast<double>(gyro_cali_.data()[2]) /
+        static_cast<double>(cali_counter_) * GetGyroLSB() * M_DEG2RAD_MULT);
+    gyro_data_key_.Set(gyro_data_key_.data_);
+
+    XR_LOG_PASS("BMI088: Gyro calibration finished.");
+  }
+
+  void CheckCalibrationRequest() {
+    if (gyro_cali_requested_.exchange(false, std::memory_order_acq_rel) &&
+        !in_cali_) {
+      BeginGyroCalibration();
+    }
+  }
+
  private:
   static int CommandFunc(BMI088* bmi088, int argc, char** argv) {
     if (argc == 1) {
-      LibXR::STDIO::Printf<"Usage:\r\n">();
-      LibXR::STDIO::Printf<"  show [time_ms] [interval_ms] - Print sensor data "
-          "periodically.\r\n">();
-      LibXR::STDIO::Printf<"  list_offset                  - Show current gyro calibration "
-          "offset.\r\n">();
-      LibXR::STDIO::Printf<"  cali                         - Start gyroscope "
-          "calibration.\r\n">();
+      LibXR::STDIO::Printf("Usage:\r\n");
+      LibXR::STDIO::Printf(
+          "  show [time_ms] [interval_ms] - Print sensor data periodically.\r\n");
+      LibXR::STDIO::Printf(
+          "  list_offset                  - Show current gyro calibration offset.\r\n");
+      LibXR::STDIO::Printf(
+          "  cali                         - Start gyroscope calibration.\r\n");
     } else if (argc == 2) {
       if (strcmp(argv[1], "list_offset") == 0) {
-        LibXR::STDIO::Printf<"Current calibration offset - x: %f, y: %f, z: %f\r\n">(
+        LibXR::STDIO::Printf("Current calibration offset - x: %f, y: %f, z: %f\r\n",
             bmi088->gyro_data_key_.data_.x(), bmi088->gyro_data_key_.data_.y(),
             bmi088->gyro_data_key_.data_.z());
       } else if (strcmp(argv[1], "cali") == 0) {
-        bmi088->gyro_data_key_.data_.x() = 0.0,
-        bmi088->gyro_data_key_.data_.y() = 0.0,
-        bmi088->gyro_data_key_.data_.z() = 0.0;
-        bmi088->gyro_cali_ = Eigen::Matrix<int64_t, 3, 1>(0.0, 0.0, 0.0);
-        bmi088->cali_counter_ = 0;
-        bmi088->in_cali_ = true;
-        LibXR::STDIO::Printf<"Starting gyroscope calibration. Please keep the device "
-            "steady.\r\n">();
-        LibXR::Thread::Sleep(3000);
-        for (int i = 0; i < 120; i++) {
-          LibXR::STDIO::Printf<"Progress: %d / 120\r">(i);
-          LibXR::Thread::Sleep(1000);
-        }
-        LibXR::STDIO::Printf<"\r\nProgress: Done\r\n">();
-        bmi088->in_cali_ = false;
-        LibXR::Thread::Sleep(1000);
-
-        bmi088->gyro_data_key_.data_.x() = static_cast<float>(
-            static_cast<double>(bmi088->gyro_cali_.data()[0]) /
-            static_cast<double>(bmi088->cali_counter_) * bmi088->GetGyroLSB() *
-            M_DEG2RAD_MULT);
-        bmi088->gyro_data_key_.data_.y() = static_cast<float>(
-            static_cast<double>(bmi088->gyro_cali_.data()[1]) /
-            static_cast<double>(bmi088->cali_counter_) * bmi088->GetGyroLSB() *
-            M_DEG2RAD_MULT);
-        bmi088->gyro_data_key_.data_.z() = static_cast<float>(
-            static_cast<double>(bmi088->gyro_cali_.data()[2]) /
-            static_cast<double>(bmi088->cali_counter_) * bmi088->GetGyroLSB() *
-            M_DEG2RAD_MULT);
-
-        LibXR::STDIO::Printf<"\r\nCalibration result - x: %f, y: %f, z: %f\r\n">(
-                             bmi088->gyro_data_key_.data_.x(),
-                             bmi088->gyro_data_key_.data_.y(),
-                             bmi088->gyro_data_key_.data_.z());
-
-        LibXR::STDIO::Printf<"Analyzing calibration quality...\r\n">();
-        bmi088->gyro_cali_ = Eigen::Matrix<int64_t, 3, 1>(0.0, 0.0, 0.0);
-        bmi088->cali_counter_ = 0;
-        bmi088->in_cali_ = true;
-        for (int i = 0; i < 60; i++) {
-          LibXR::STDIO::Printf<"Progress: %d / 60\r">(i);
-          LibXR::Thread::Sleep(1000);
-        }
-        LibXR::STDIO::Printf<"\r\nProgress: Done\r\n">();
-        bmi088->in_cali_ = false;
-        LibXR::Thread::Sleep(1000);
-
-        LibXR::STDIO::Printf<"\r\nCalibration error - x: %f, y: %f, z: %f\r\n">(
-            static_cast<double>(bmi088->gyro_cali_.data()[0]) /
-                    static_cast<double>(bmi088->cali_counter_) *
-                    bmi088->GetGyroLSB() * M_DEG2RAD_MULT -
-                bmi088->gyro_data_key_.data_.x(),
-            static_cast<double>(bmi088->gyro_cali_.data()[1]) /
-                    static_cast<double>(bmi088->cali_counter_) *
-                    bmi088->GetGyroLSB() * M_DEG2RAD_MULT -
-                bmi088->gyro_data_key_.data_.y(),
-            static_cast<double>(bmi088->gyro_cali_.data()[2]) /
-                    static_cast<double>(bmi088->cali_counter_) *
-                    bmi088->GetGyroLSB() * M_DEG2RAD_MULT -
-                bmi088->gyro_data_key_.data_.z());
-
-        bmi088->gyro_data_key_.Set(bmi088->gyro_data_key_.data_);
-        LibXR::STDIO::Printf<"Calibration data saved.\r\n">();
+        bmi088->BeginGyroCalibration();
+        LibXR::STDIO::Printf(
+            "Gyroscope calibration started. Keep the device steady.\r\n");
       }
     } else if (argc == 4) {
       if (strcmp(argv[1], "show") == 0) {
@@ -598,8 +611,9 @@ class BMI088 : public LibXR::Application {
         delay = std::clamp(delay, 2, 1000);
 
         while (time > 0) {
-          LibXR::STDIO::Printf<"Accel: x = %+5f, y = %+5f, z = %+5f | "
-              "Gyro: x = %+5f, y = %+5f, z = %+5f | Temp: %+5f\r\n">(
+          LibXR::STDIO::Printf(
+              "Accel: x = %+5f, y = %+5f, z = %+5f | Gyro: x = %+5f, y = %+5f, "
+              "z = %+5f | Temp: %+5f\r\n",
               bmi088->accl_data_.x(), bmi088->accl_data_.y(),
               bmi088->accl_data_.z(), bmi088->gyro_data_.x(),
               bmi088->gyro_data_.y(), bmi088->gyro_data_.z(),
@@ -609,7 +623,7 @@ class BMI088 : public LibXR::Application {
         }
       }
     } else {
-      LibXR::STDIO::Printf<"Error: Invalid arguments.\r\n">();
+      LibXR::STDIO::Printf("Error: Invalid arguments.\r\n");
       return -1;
     }
 
@@ -632,6 +646,7 @@ class BMI088 : public LibXR::Application {
   LibXR::MicrosecondTimestamp::Duration dt_gyro_ = 0;
 
   float target_temperature_ = 25.0f;
+  uint32_t calibration_target_samples_ = 2000;
 
   uint8_t rw_buffer_[20];
   Eigen::Matrix<float, 3, 1> gyro_data_, accl_data_;
@@ -639,6 +654,7 @@ class BMI088 : public LibXR::Application {
   LibXR::GPIO *cs_accl_, *cs_gyro_, *int_gyro_;
   LibXR::SPI* spi_;
   LibXR::PWM* pwm_;
+  LibXR::Mutex* spi_mutex_ = nullptr;
 
   LibXR::Quaternion<float> rotation_;
 
@@ -650,5 +666,6 @@ class BMI088 : public LibXR::Application {
 
   LibXR::Database::Key<Eigen::Matrix<float, 3, 1>> gyro_data_key_;
 
+  std::atomic<bool> gyro_cali_requested_{false};
   LibXR::Thread thread_;
 };
