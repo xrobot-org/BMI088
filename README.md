@@ -55,7 +55,7 @@ template_args:
 
 ## 6. 依赖与硬件
 Required Hardware:
-- spi_bmi088/spi2/SPI2
+- spi_bmi088/spi1/SPI1
 - bmi088_accl_cs
 - bmi088_gyro_cs
 - bmi088_gyro_int
