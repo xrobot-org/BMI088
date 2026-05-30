@@ -43,15 +43,6 @@ depends: []
 #include "spi.hpp"
 #include "transform.hpp"
 
-#ifndef XR_STDIO_PRINTF_COMPAT
-#if __has_include("print.hpp")
-#define XR_STDIO_PRINTF_COMPAT(fmt, ...) LibXR::STDIO::Printf<fmt>(__VA_ARGS__)
-#else
-#define XR_STDIO_PRINTF_COMPAT(fmt, ...) \
-  LibXR::STDIO::Printf(fmt __VA_OPT__(, ) __VA_ARGS__)
-#endif
-#endif
-
 #define BMI088_REG_ACCL_CHIP_ID (0x00)
 #define BMI088_REG_ACCL_ERR (0x02)
 #define BMI088_REG_ACCL_STATUS (0x03)
@@ -595,22 +586,21 @@ class BMI088 : public LibXR::Application {
  private:
   static int CommandFunc(BMI088* bmi088, int argc, char** argv) {
     if (argc == 1) {
-      XR_STDIO_PRINTF_COMPAT("Usage:\r\n");
-      XR_STDIO_PRINTF_COMPAT(
+      LibXR::STDIO::Printf("Usage:\r\n");
+      LibXR::STDIO::Printf(
           "  show [time_ms] [interval_ms] - Print sensor data periodically.\r\n");
-      XR_STDIO_PRINTF_COMPAT(
+      LibXR::STDIO::Printf(
           "  list_offset                  - Show current gyro calibration offset.\r\n");
-      XR_STDIO_PRINTF_COMPAT(
+      LibXR::STDIO::Printf(
           "  cali                         - Start gyroscope calibration.\r\n");
     } else if (argc == 2) {
       if (strcmp(argv[1], "list_offset") == 0) {
-        XR_STDIO_PRINTF_COMPAT(
-            "Current calibration offset - x: %f, y: %f, z: %f\r\n",
+        LibXR::STDIO::Printf("Current calibration offset - x: %f, y: %f, z: %f\r\n",
             bmi088->gyro_data_key_.data_.x(), bmi088->gyro_data_key_.data_.y(),
             bmi088->gyro_data_key_.data_.z());
       } else if (strcmp(argv[1], "cali") == 0) {
         bmi088->BeginGyroCalibration();
-        XR_STDIO_PRINTF_COMPAT(
+        LibXR::STDIO::Printf(
             "Gyroscope calibration started. Keep the device steady.\r\n");
       }
     } else if (argc == 4) {
@@ -621,8 +611,9 @@ class BMI088 : public LibXR::Application {
         delay = std::clamp(delay, 2, 1000);
 
         while (time > 0) {
-          XR_STDIO_PRINTF_COMPAT(
-              "Accel: x = %+5f, y = %+5f, z = %+5f | Gyro: x = %+5f, y = %+5f, z = %+5f | Temp: %+5f\r\n",
+          LibXR::STDIO::Printf(
+              "Accel: x = %+5f, y = %+5f, z = %+5f | Gyro: x = %+5f, y = %+5f, "
+              "z = %+5f | Temp: %+5f\r\n",
               bmi088->accl_data_.x(), bmi088->accl_data_.y(),
               bmi088->accl_data_.z(), bmi088->gyro_data_.x(),
               bmi088->gyro_data_.y(), bmi088->gyro_data_.z(),
@@ -632,7 +623,7 @@ class BMI088 : public LibXR::Application {
         }
       }
     } else {
-      XR_STDIO_PRINTF_COMPAT("Error: Invalid arguments.\r\n");
+      LibXR::STDIO::Printf("Error: Invalid arguments.\r\n");
       return -1;
     }
 
