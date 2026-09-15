@@ -446,6 +446,8 @@ class BMI088
       case AcclRange::ACCL_3G:
         return 1.0 / 10920.0;
         break;
+      default:
+        return 0.0f;
     }
   }
 
@@ -500,6 +502,8 @@ class BMI088
       case GyroRange::DEG_125DPS:
         return 1.0 / 262.144;
         break;
+      default:
+        return 0.0f;
     }
   }
 
