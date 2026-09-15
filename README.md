@@ -1,5 +1,16 @@
 # BMI088
 
+## Static assembly source line
+
+This source line uses explicit C++ constructor dependencies and ordered instance
+arguments. Inspect the current primary header with `xrobot_mod_parser --path .`;
+its declarations, not old manifest/config examples, define the interface.
+Historical HardwareContainer/ApplicationManager examples below apply only to the
+older dynamic source tags. Device/protocol descriptions remain relevant.
+See the XRobot [migration guide](https://github.com/xrobot-org/XRobot/blob/dev/MIGRATION.md).
+Compilation is not hardware validation; retain version-specific board evidence.
+
+
 ## 1. 模块作用
 BMI088 IMU 驱动模块。负责传感器初始化、数据采样解析和温控输出。
 Manifest 描述：博世 BMI088 6 轴惯性测量单元（IMU）的驱动模块 / Driver module for Bosch BMI088 6-axis Inertial Measurement Unit (IMU)
