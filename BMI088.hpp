@@ -311,22 +311,34 @@ class BMI088
    * @param param 配置参数。
    *              Configuration parameters.
    */
-  BMI088(
-      LibXR::GPIO& accl_cs,
-      LibXR::GPIO& gyro_cs,
-      LibXR::GPIO& gyro_int,
-      LibXR::SPI& spi,
-      LibXR::PWM& heater_pwm,
-      LibXR::Database& database,
-      LibXR::RamFS& ramfs,
-      const Param& param = {.gyro_freq = BMI088::GyroFreq::GYRO_2000HZ_BW532HZ, .accl_freq = BMI088::AcclFreq::ACCL_1600HZ, .gyro_range = BMI088::GyroRange::DEG_2000DPS, .accl_range = BMI088::AcclRange::ACCL_24G, .rotation = {1.0f, 0.0f, 0.0f, 0.0f}, .pid_param = {.k = 1.0f, .p = 0.0f, .i = 0.0f, .d = 0.0f, .i_limit = 0.0f, .out_limit = 0.0f, .cycle = false}, .gyro_topic_name = "bmi088_gyro", .accl_topic_name = "bmi088_accl", .target_temperature = 45, .task_stack_depth = 2048})
+  BMI088(LibXR::GPIO& accl_cs, LibXR::GPIO& gyro_cs, LibXR::GPIO& gyro_int,
+         LibXR::SPI& spi, LibXR::PWM& heater_pwm, LibXR::Database& database,
+         LibXR::RamFS& ramfs,
+         const Param& param = {.gyro_freq = BMI088::GyroFreq::GYRO_2000HZ_BW532HZ,
+                               .accl_freq = BMI088::AcclFreq::ACCL_1600HZ,
+                               .gyro_range = BMI088::GyroRange::DEG_2000DPS,
+                               .accl_range = BMI088::AcclRange::ACCL_24G,
+                               .rotation = {1.0f, 0.0f, 0.0f, 0.0f},
+                               .pid_param = {.k = 1.0f,
+                                             .p = 0.0f,
+                                             .i = 0.0f,
+                                             .d = 0.0f,
+                                             .i_limit = 0.0f,
+                                             .out_limit = 0.0f,
+                                             .cycle = false},
+                               .gyro_topic_name = "bmi088_gyro",
+                               .accl_topic_name = "bmi088_accl",
+                               .target_temperature = 45,
+                               .task_stack_depth = 2048})
       : gyro_range_(param.gyro_range),
         accel_range_(param.accl_range),
         gyro_freq_(param.gyro_freq),
         accl_freq_(param.accl_freq),
         target_temperature_(param.target_temperature),
-        topic_gyro_(LibXR::Topic::CreateTopic<decltype(gyro_data_)>(param.gyro_topic_name)),
-        topic_accl_(LibXR::Topic::CreateTopic<decltype(accl_data_)>(param.accl_topic_name)),
+        topic_gyro_(
+            LibXR::Topic::CreateTopic<decltype(gyro_data_)>(param.gyro_topic_name)),
+        topic_accl_(
+            LibXR::Topic::CreateTopic<decltype(accl_data_)>(param.accl_topic_name)),
         cs_accl_(std::addressof(accl_cs)),
         cs_gyro_(std::addressof(gyro_cs)),
         int_gyro_(std::addressof(gyro_int)),
@@ -509,7 +521,7 @@ class BMI088
   static void ThreadFunc(BMI088* bmi088)
   {
     /* Start PWM */
-    bmi088->pwm_->SetConfig({30000});
+    bmi088->pwm_->SetConfig({.frequency = 30000});
     bmi088->pwm_->SetDutyCycle(0);
     bmi088->pwm_->Enable();
 
