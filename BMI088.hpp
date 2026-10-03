@@ -381,6 +381,12 @@ class BMI088
 
     XR_LOG_PASS("BMI088: Init succeeded.");
 
+    // 加热 PWM 在温控定时任务启动前配置好
+    // The heater PWM is configured before the temperature control task starts
+    pwm_->SetConfig({.frequency = 30000});
+    pwm_->SetDutyCycle(0);
+    pwm_->Enable();
+
     thread_.Create(this, ThreadFunc, "bmi088_thread", param.task_stack_depth,
                    LibXR::Thread::Priority::REALTIME);
 
@@ -512,20 +518,15 @@ class BMI088
   }
 
   /**
-   * @brief 采样线程：启动加热 PWM，等待陀螺仪中断，读取并发布陀螺仪与加速度计数据。
-   *        Sampling thread: start the heater PWM, wait for the gyroscope interrupt, then
-   *        read and publish the gyroscope and accelerometer data.
+   * @brief 采样线程：等待陀螺仪中断，读取并发布陀螺仪与加速度计数据。
+   *        Sampling thread: wait for the gyroscope interrupt, then read and publish the
+   *        gyroscope and accelerometer data.
    *
    * @param bmi088 BMI088 实例。
    *               BMI088 instance.
    */
   static void ThreadFunc(BMI088* bmi088)
   {
-    /* Start PWM */
-    bmi088->pwm_->SetConfig({.frequency = 30000});
-    bmi088->pwm_->SetDutyCycle(0);
-    bmi088->pwm_->Enable();
-
     while (true)
     {
       if (bmi088->new_data_.Wait(50) == LibXR::ErrorCode::OK)
