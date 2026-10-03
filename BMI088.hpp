@@ -7,6 +7,7 @@ depends: []
 === END MANIFEST === */
 // clang-format on
 
+#include <algorithm>
 #include <memory>
 
 #include "database.hpp"
@@ -546,15 +547,17 @@ class BMI088
   }
 
   /**
-   * @brief 温控步骤：用 PID 计算加热 PWM 占空比。
-   *        Temperature-control step: compute the heater PWM duty cycle with the PID.
+   * @brief 温控步骤：用 PID 计算加热 PWM 占空比，并限制在 0 到 1。
+   *        Temperature-control step: compute the heater PWM duty cycle with the PID and
+   *        clamp it to 0..1.
    *
    * @param dt 控制周期，单位 s。
    *           Control period in s.
    */
   void ControlTemperature(float dt)
   {
-    auto duty_cycle = pid_heat_.Calculate(target_temperature_, temperature_, dt);
+    float duty_cycle = pid_heat_.Calculate(target_temperature_, temperature_, dt);
+    duty_cycle = std::clamp(duty_cycle, 0.0f, 1.0f);
     pwm_->SetDutyCycle(duty_cycle);
   }
 

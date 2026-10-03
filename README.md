@@ -8,7 +8,7 @@
 
 采样线程 `bmi088_thread`（REALTIME 优先级）等待陀螺仪中断，依次读取陀螺仪和加速度计（含温度），换算后乘以 `rotation`（传感器坐标系到应用坐标系）并发布。50 ms 内没有中断时输出日志 `BMI088 wait timeout.`。陀螺仪单位为 rad/s，发布前先减去零偏再旋转；加速度计单位为 g。原始读数全为 0 时输出不更新，保留上一次的值。
 
-加热 PWM 以 30 kHz 运行；一个周期 50 ms 的 LibXR 定时器任务用 `pid_param` 计算占空比，使芯片温度趋近 `target_temperature`（°C）。默认 PID 的 `p`、`i`、`d` 为 0，占空比恒为 0。
+加热 PWM 以 30 kHz 运行；一个周期 50 ms 的 LibXR 定时器任务用 `pid_param` 计算占空比并限制在 0 到 1，使芯片温度趋近 `target_temperature`（°C）。默认 PID 的 `p`、`i`、`d` 为 0，占空比恒为 0。
 
 陀螺仪零偏保存在 Database 的键 `bmi088_gyro_data` 中，上电时读取。
 
@@ -25,7 +25,7 @@ Upon construction, BMI088 registers the falling-edge interrupt of the gyroscope 
 
 The sampling thread `bmi088_thread` (REALTIME priority) waits for the gyroscope interrupt, reads the gyroscope and then the accelerometer (including the temperature), converts the values, multiplies them by `rotation` (sensor frame to application frame) and publishes them. When no interrupt arrives within 50 ms, it logs `BMI088 wait timeout.`. The gyroscope unit is rad/s, with the zero offset subtracted before the rotation; the accelerometer unit is g. When the raw reading is all zeros, the output is not updated and keeps the previous value.
 
-The heater PWM runs at 30 kHz; a LibXR timer task with a 50 ms period computes the duty cycle with `pid_param` so that the chip temperature approaches `target_temperature` (°C). With the default PID, `p`, `i` and `d` are 0 and the duty cycle stays 0.
+The heater PWM runs at 30 kHz; a LibXR timer task with a 50 ms period computes the duty cycle with `pid_param` and clamps it to 0..1 so that the chip temperature approaches `target_temperature` (°C). With the default PID, `p`, `i` and `d` are 0 and the duty cycle stays 0.
 
 The gyroscope zero offset is stored in the Database under the key `bmi088_gyro_data` and read at power-up.
 
@@ -74,7 +74,7 @@ BMI088(LibXR::GPIO& accl_cs,
 - `gyro_range`：陀螺仪量程，默认 `DEG_2000DPS`；可选 2000、1000、500、250、125 dps。
 - `accl_range`：加速度计量程，默认 `ACCL_24G`；可选 3、6、12、24 g。
 - `rotation`：传感器坐标系到应用坐标系的四元数 `{w, x, y, z}`，默认单位四元数。
-- `pid_param`：温控 PID，`LibXR::PID<float>::Param`，字段为 `k, p, i, d, i_limit, out_limit, cycle`，默认 `k = 1`，其余为 0；输出直接作为 PWM 占空比（0.0 到 1.0）。
+- `pid_param`：温控 PID，`LibXR::PID<float>::Param`，字段为 `k, p, i, d, i_limit, out_limit, cycle`，默认 `k = 1`，其余为 0；输出作为 PWM 占空比，限制在 0.0 到 1.0。
 - `gyro_topic_name`、`accl_topic_name`：发布的 Topic 名称，默认 `"bmi088_gyro"`、`"bmi088_accl"`。
 - `target_temperature`：目标温度，单位 °C，默认 45。
 - `task_stack_depth`：采样线程栈深，默认 2048。
@@ -96,7 +96,7 @@ Configuration parameters (`Param`):
 - `gyro_range`: gyroscope range, default `DEG_2000DPS`; options are 2000, 1000, 500, 250 and 125 dps.
 - `accl_range`: accelerometer range, default `ACCL_24G`; options are 3, 6, 12 and 24 g.
 - `rotation`: quaternion `{w, x, y, z}` from the sensor frame to the application frame, default identity.
-- `pid_param`: temperature-control PID, `LibXR::PID<float>::Param` with fields `k, p, i, d, i_limit, out_limit, cycle`, default `k = 1` and all others 0; the output is used directly as the PWM duty cycle (0.0 to 1.0).
+- `pid_param`: temperature-control PID, `LibXR::PID<float>::Param` with fields `k, p, i, d, i_limit, out_limit, cycle`, default `k = 1` and all others 0; the output is the PWM duty cycle, clamped to 0.0 to 1.0.
 - `gyro_topic_name`, `accl_topic_name`: names of the published Topics, default `"bmi088_gyro"` and `"bmi088_accl"`.
 - `target_temperature`: target temperature in °C, default 45.
 - `task_stack_depth`: stack depth of the sampling thread, default 2048.
