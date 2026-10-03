@@ -122,7 +122,7 @@ An instance written by `xrobot instance add xrobot-org/BMI088`, with the depende
 ```yaml
 modules:
   - module: xrobot-org/BMI088
-    id: bmi088_0
+    id: bmi088
     args:
       - accl_cs: bmi088_accl_cs
       - gyro_cs: bmi088_gyro_cs
