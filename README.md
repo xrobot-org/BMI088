@@ -40,9 +40,9 @@ The Module registers the command `bmi088` in RamFS:
 
 ## 2. 时间戳约定 / Timestamp Convention
 
-`gyro_topic_name` 与 `accl_topic_name` 两个 Topic 使用同一次陀螺仪数据就绪中断采集到的时间戳（µs）发布。采样时间由 Topic 的 envelope timestamp 给出，消费者读取该时间戳。
+`gyro_topic_name` 与 `accl_topic_name` 两个 Topic 使用同一次陀螺仪数据就绪中断采集到的时间戳（µs）发布。采样时间由 Topic 消息的时间戳给出，消费者读取该时间戳。
 
-The Topics `gyro_topic_name` and `accl_topic_name` are published with the timestamp (µs) captured at the same gyroscope data-ready interrupt. The sampling time is given by the Topic envelope timestamp, which consumers read.
+The Topics `gyro_topic_name` and `accl_topic_name` are published with the timestamp (µs) captured at the same gyroscope data-ready interrupt. The sampling time is given by the Topic message timestamp, which consumers read.
 
 ## 3. 构造接口 / Constructor
 
@@ -77,7 +77,7 @@ BMI088(LibXR::GPIO& accl_cs,
 - `pid_param`：温控 PID，`LibXR::PID<float>::Param`，字段为 `k, p, i, d, i_limit, out_limit, cycle`，默认 `k = 1`，其余为 0；输出作为 PWM 占空比，限制在 0.0 到 1.0。
 - `gyro_topic_name`、`accl_topic_name`：发布的 Topic 名称，默认 `"bmi088_gyro"`、`"bmi088_accl"`。
 - `target_temperature`：目标温度，单位 °C，默认 45。
-- `task_stack_depth`：采样线程栈深，默认 2048。
+- `task_stack_depth`：采样线程栈深，单位字节，默认 2048。
 
 Dependencies:
 
@@ -99,7 +99,7 @@ Configuration parameters (`Param`):
 - `pid_param`: temperature-control PID, `LibXR::PID<float>::Param` with fields `k, p, i, d, i_limit, out_limit, cycle`, default `k = 1` and all others 0; the output is the PWM duty cycle, clamped to 0.0 to 1.0.
 - `gyro_topic_name`, `accl_topic_name`: names of the published Topics, default `"bmi088_gyro"` and `"bmi088_accl"`.
 - `target_temperature`: target temperature in °C, default 45.
-- `task_stack_depth`: stack depth of the sampling thread, default 2048.
+- `task_stack_depth`: stack depth of the sampling thread in bytes, default 2048.
 
 ## 4. Topic
 
@@ -115,35 +115,35 @@ Configuration parameters (`Param`):
 
 ## 5. 配置示例 / Configuration Example
 
-`xrobot instance add xrobot-org/BMI088` 写入的实例，依赖填写为 BSP 通过 `XR_REGISTER`（硬件注册）注册的名称：
+`xrobot instance add xrobot-org/BMI088` 写入的实例，依赖填写为 BSP 通过 `XR_REGISTER`（硬件注册）注册的名称，输出频率与 `pid_param` 取使用该模块的 BSP 配置中的值：
 
-An instance written by `xrobot instance add xrobot-org/BMI088`, with the dependencies set to names registered by the BSP with `XR_REGISTER` (Registration):
+An instance written by `xrobot instance add xrobot-org/BMI088`, with the dependencies set to names registered by the BSP with `XR_REGISTER` (Registration) and the output frequencies and `pid_param` taken from a BSP configuration that uses the Module:
 
 ```yaml
 modules:
   - module: xrobot-org/BMI088
     id: bmi088
     args:
-      - accl_cs: bmi088_accl_cs
-      - gyro_cs: bmi088_gyro_cs
-      - gyro_int: bmi088_gyro_int
+      - accl_cs: ACCL_CS
+      - gyro_cs: GYRO_CS
+      - gyro_int: GYRO_INT
       - spi: spi1
-      - heater_pwm: imu_heat_pwm
+      - heater_pwm: pwm_tim10_ch1
       - database: database
       - ramfs: ramfs
       - param:
-          gyro_freq: BMI088::GyroFreq::GYRO_2000HZ_BW532HZ
-          accl_freq: BMI088::AcclFreq::ACCL_1600HZ
+          gyro_freq: BMI088::GyroFreq::GYRO_1000HZ_BW116HZ
+          accl_freq: BMI088::AcclFreq::ACCL_800HZ
           gyro_range: BMI088::GyroRange::DEG_2000DPS
           accl_range: BMI088::AcclRange::ACCL_24G
           rotation: '{1.0f, 0.0f, 0.0f, 0.0f}'
           pid_param:
-            k: 1.0f
-            p: 0.0f
-            i: 0.0f
+            k: 0.15f
+            p: 1.0f
+            i: 0.1f
             d: 0.0f
-            i_limit: 0.0f
-            out_limit: 0.0f
+            i_limit: 0.3f
+            out_limit: 1.0f
             cycle: false
           gyro_topic_name: "bmi088_gyro"
           accl_topic_name: "bmi088_accl"
