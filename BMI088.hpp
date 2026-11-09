@@ -375,7 +375,14 @@ class BMI088
 
     while (!Init())
     {
-      XR_LOG_ERROR("BMI088: Init failed. Try again.");
+      // 同一个理由：重试可以快，喊话必须慢。
+      // Same reason: retry fast, shout slowly.
+      const uint32_t now_ms = static_cast<uint32_t>(LibXR::Timebase::GetMilliseconds());
+      if (now_ms - last_warn_ms_ > 1000u)
+      {
+        last_warn_ms_ = now_ms;
+        XR_LOG_ERROR("BMI088: Init failed. Try again.");
+      }
       LibXR::Thread::Sleep(100);
     }
 
@@ -542,7 +549,18 @@ class BMI088
       }
       else
       {
-        XR_LOG_WARN("BMI088 wait timeout.");
+        // 一次超时不是新闻，每 50 ms 一条才是：控制台环在跨核路径上，远端核在
+        // "持环写入"的窗口里被复位会让大核永远等同一把锁。所以这里按秒限频，
+        // 只有第一条和每秒一条进环。
+        // One timeout is not news; one every 50 ms is.  The console ring sits on the
+        // cross-core path, and a remote core reset inside a ring write leaves the big
+        // core waiting on that lock forever, so collapse the flood to one line a second.
+        const uint32_t now_ms = static_cast<uint32_t>(LibXR::Timebase::GetMilliseconds());
+        if (now_ms - bmi088->last_warn_ms_ > 1000u)
+        {
+          bmi088->last_warn_ms_ = now_ms;
+          XR_LOG_WARN("BMI088 wait timeout.");
+        }
       }
     }
   }
@@ -852,6 +870,7 @@ class BMI088
   float temperature_ = 0.0f;
 
   LibXR::MicrosecondTimestamp sample_timestamp_ = 0;
+  uint32_t last_warn_ms_{0};  ///< 失败日志限频 / rate limit for failure logging
   LibXR::MicrosecondTimestamp last_gyro_int_time_ = 0;
   LibXR::MicrosecondTimestamp::Duration dt_gyro_ = 0;
 
